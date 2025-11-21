@@ -1,0 +1,289 @@
+name: Manual Docker Image Sync
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_list:
+        description: '要同步的镜像列表（用逗号分隔，例如：nginx:latest,redis:7.0,ubuntu:22.04）'
+        required: true
+        type: string
+      force_update:
+        description: '强制覆盖已存在的镜像'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+      dry_run:
+        description: '仅检测镜像是否存在，不实际同步'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+env:
+  ALIYUN_REGISTRY: "${{ secrets.ALIYUN_REGISTRY }}"
+  ALIYUN_NAME_SPACE: "${{ secrets.ALIYUN_NAME_SPACE }}"
+  ALIYUN_REGISTRY_USER: "${{ secrets.ALIYUN_REGISTRY_USER }}"
+  ALIYUN_REGISTRY_PASSWORD: "${{ secrets.ALIYUN_REGISTRY_PASSWORD }}"
+
+jobs:
+  manual-sync:
+    name: 手动镜像同步
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: 检查输入参数
+      run: |
+        echo "📋 输入参数检查："
+        echo "  镜像列表: ${{ github.event.inputs.image_list }}"
+        echo "  强制更新: ${{ github.event.inputs.force_update }}"
+        echo "  仅检测模式: ${{ github.event.inputs.dry_run }}"
+        echo ""
+
+        # 检查镜像列表是否为空
+        if [[ -z "${{ github.event.inputs.image_list }}" ]]; then
+          echo "❌ 错误：镜像列表不能为空"
+          exit 1
+        fi
+
+        echo "✅ 参数检查通过"
+
+    - name: 增加可用磁盘空间
+      uses: easimon/maximize-build-space@master
+      with:
+        root-reserve-mb: 2048
+        swap-size-mb: 128
+        remove-dotnet: 'true'
+        remove-haskell: 'true'
+        build-mount-path: '/var/lib/docker/'
+
+    - name: 重启 Docker
+      run: sudo service docker restart
+
+    - name: 检出代码
+      uses: actions/checkout@v4
+
+    - name: Docker Setup Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: 解析和同步镜像
+      run: |
+        set +e  # 临时禁用严格模式以避免脚本意外退出
+
+        # 获取输入参数
+        IMAGE_LIST_INPUT="${{ github.event.inputs.image_list }}"
+        FORCE_UPDATE="${{ github.event.inputs.force_update }}"
+        DRY_RUN="${{ github.event.inputs.dry_run }}"
+
+        echo "🚀 手动镜像同步系统启动..."
+        echo "=============================================================================="
+
+        # 登录阿里云仓库
+        echo "🔐 登录阿里云镜像仓库..."
+        docker login -u $ALIYUN_REGISTRY_USER -p $ALIYUN_REGISTRY_PASSWORD $ALIYUN_REGISTRY
+
+        if [[ $? -ne 0 ]]; then
+          echo "❌ 阿里云仓库登录失败"
+          exit 1
+        fi
+
+        echo "✅ 登录成功"
+        echo ""
+
+        # 解析镜像列表（逗号分隔）
+        echo "📋 解析镜像列表..."
+        IFS=',' read -ra IMAGES <<< "$IMAGE_LIST_INPUT"
+
+        # 创建临时文件存储要处理的镜像
+        TEMP_IMAGES_FILE="temp_manual_images.txt"
+        > $TEMP_IMAGES_FILE
+
+        VALID_IMAGES_COUNT=0
+
+        for image_input in "${IMAGES[@]}"; do
+          # 去除前后空格
+          image=$(echo "$image_input" | xargs)
+
+          # 跳过空值
+          if [[ -z "$image" ]]; then
+            continue
+          fi
+
+          echo "🔍 处理输入: $image"
+
+          # 验证镜像名称格式（简单检查）
+          if echo "$image" | grep -q "^[a-zA-Z0-9._/-]\+$"; then
+            echo "$image" >> $TEMP_IMAGES_FILE
+            ((VALID_IMAGES_COUNT++))
+            echo "✅ 镜像名称格式有效: $image"
+          else
+            echo "⚠️  镜像名称格式可能有问题，但仍将尝试: $image"
+            echo "$image" >> $TEMP_IMAGES_FILE
+            ((VALID_IMAGES_COUNT++))
+          fi
+        done
+
+        echo ""
+        echo "📊 解析结果："
+        echo "  输入镜像数量: ${#IMAGES[@]}"
+        echo "  有效镜像数量: $VALID_IMAGES_COUNT"
+        echo ""
+
+        if [[ $VALID_IMAGES_COUNT -eq 0 ]]; then
+          echo "❌ 没有有效的镜像需要处理"
+          exit 1
+        fi
+
+        # 数据预处理，判断镜像是否重名
+        echo "🔍 预处理重名镜像分析..."
+        declare -A duplicate_images
+        declare -A temp_map
+
+        while IFS= read -r line || [ -n "$line" ]; do
+          [[ -z "$line" ]] && continue
+
+          # 获取镜像的完整名称
+          image=$(echo "$line" | awk '{print $NF}')
+          image="${image%%@*}"
+
+          # 获取镜像名:版本号
+          image_name_tag=$(echo "$image" | awk -F'/' '{print $NF}')
+
+          # 获取命名空间
+          name_space=$(echo "$image" | awk -F'/' '{if (NF==3) print $2; else if (NF==2) print $1; else print ""}')
+          name_space="${name_space}_"
+
+          # 获取镜像名
+          image_name=$(echo "$image_name_tag" | awk -F':' '{print $1}')
+
+          # 检测重名镜像
+          if [[ -n "${temp_map[$image_name]}" ]]; then
+            if [[ "${temp_map[$image_name]}" != $name_space ]]; then
+              echo "duplicate image name: $image_name"
+              duplicate_images[$image_name]="true"
+            fi
+          else
+            temp_map[$image_name]=$name_space
+          fi
+        done < $TEMP_IMAGES_FILE
+
+        echo ""
+        echo "🔄 开始处理镜像..."
+
+        TOTAL_COUNT=0
+        SUCCESS_COUNT=0
+        SKIP_COUNT=0
+
+        while IFS= read -r line || [ -n "$line" ]; do
+          [[ -z "$line" ]] && continue
+
+          ((TOTAL_COUNT++))
+          echo ""
+          echo "📦 处理镜像 [$TOTAL_COUNT/$VALID_IMAGES_COUNT]: $line"
+
+          # 获取platform参数和镜像名
+          platform=""
+          if echo "$line" | grep -q -- '--platform'; then
+            platform=$(echo "$line" | awk -F'--platform[ =]' '{if (NF>1) print $2}' | awk '{print $1}')
+            image=$(echo "$line" | awk '{print $NF}')
+          else
+            image="$line"
+          fi
+
+          # 生成最终目标镜像名称
+          image_name_tag=$(echo "$image" | awk -F'/' '{print $NF}')
+          name_space=$(echo "$image" | awk -F'/' '{if (NF==3) print $2; else if (NF==2) print $1; else print ""}')
+          name_space="${name_space}_"
+          image_name=$(echo "$image_name_tag" | awk -F':' '{print $1}')
+
+          # 处理重名镜像
+          name_space_prefix=""
+          if [[ -n "${duplicate_images[$image_name]}" ]]; then
+            if [[ -n "${name_space}" ]]; then
+              name_space_prefix="${name_space}"
+            fi
+          fi
+
+          # 处理platform前缀
+          platform_prefix=""
+          if [ -n "$platform" ]; then
+            platform_prefix="${platform//\//_}_"
+          fi
+
+          # 将@sha256:等字符删除
+          image_name_tag="${image_name_tag%%@*}"
+
+          # 生成最终镜像名
+          final_image="$ALIYUN_REGISTRY/$ALIYUN_NAME_SPACE/$platform_prefix$name_space_prefix$image_name_tag"
+
+          echo "🎯 目标镜像: $final_image"
+
+          # 检查镜像是否已存在
+          if docker manifest inspect $final_image >/dev/null 2>&1; then
+            if [[ "$FORCE_UPDATE" == "true" ]]; then
+              echo "🔄 镜像已存在，强制更新模式: $final_image"
+            else
+              echo "⏭️  镜像已存在，跳过: $final_image"
+              ((SKIP_COUNT++))
+              continue
+            fi
+          fi
+
+          # 仅检测模式
+          if [[ "$DRY_RUN" == "true" ]]; then
+            echo "🔍 [仅检测] 镜像需要同步: $image"
+            ((SUCCESS_COUNT++))
+            continue
+          fi
+
+          # 执行镜像同步
+          echo "🔄 docker pull $line"
+          if docker pull $line; then
+            echo "✅ 拉取成功"
+
+            echo "🏷️  docker tag $image $final_image"
+            docker tag $image $final_image
+
+            echo "📤 docker push $final_image"
+            if docker push $final_image; then
+              ((SUCCESS_COUNT++))
+              echo "✅ 推送成功: $final_image"
+            else
+              echo "❌ 推送失败: $final_image"
+            fi
+
+            # 清理本地镜像
+            echo "🧹 清理本地镜像..."
+            docker rmi $image 2>/dev/null || true
+            docker rmi $final_image 2>/dev/null || true
+
+          else
+            echo "❌ 拉取失败: $line"
+          fi
+
+        done < $TEMP_IMAGES_FILE
+
+        # 清理临时文件
+        rm -f $TEMP_IMAGES_FILE
+
+        echo ""
+        echo "=============================================================================="
+        echo "📊 手动镜像同步完成统计:"
+        echo "  📋 总计处理: $TOTAL_COUNT 个镜像"
+        echo "  ✅ 同步成功: $SUCCESS_COUNT 个镜像"
+        echo "  ⏭️  跳过已存在: $SKIP_COUNT 个镜像"
+        echo "  ❌ 失败数量: $((TOTAL_COUNT - SUCCESS_COUNT - SKIP_COUNT)) 个镜像"
+
+        if [[ "$DRY_RUN" == "true" ]]; then
+          echo "  🔍 模式: 仅检测，未实际同步"
+        fi
+
+        if [[ "$FORCE_UPDATE" == "true" ]]; then
+          echo "  🔄 模式: 强制更新"
+        fi
+
+        echo "=============================================================================="
