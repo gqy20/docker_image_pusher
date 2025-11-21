@@ -1,0 +1,157 @@
+name: Update Latest Images
+
+on:
+  workflow_dispatch:  # 手动触发
+  schedule:
+    # 每周一凌晨22点执行（UTC时间），相当于北京时间上午6点
+    - cron: '0 22 * * 0'
+
+jobs:
+  update-latest:
+    name: Update Latest Version Images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Setup Docker
+      uses: docker/setup-buildx-action@v3
+
+    - name: Update Images Script
+      run: |
+        # 设置变量
+        IMAGES_FILE="images.txt"
+        BACKUP_FILE="images.txt.backup"
+        UPDATED=false
+
+        echo "🔍 开始检查并更新最新版本的镜像..."
+        echo "=============================================================================="
+
+        # 创建备份
+        cp $IMAGES_FILE $BACKUP_FILE
+        echo "✅ 已创建备份文件: $BACKUP_FILE"
+
+        # 读取并处理images.txt
+        while IFS= read -r line || [ -n "$line" ]; do
+            # 跳过空行和注释
+            [[ -z "$line" ]] && continue
+            if echo "$line" | grep -q '^\s*#'; then
+                continue
+            fi
+
+            echo "🔍 处理镜像: $line"
+
+            # 提取platform参数和镜像名
+            platform=""
+            if echo "$line" | grep -q -- '--platform'; then
+                platform=$(echo "$line" | awk -F'--platform[ =]' '{print $2}' | awk '{print $1}')
+                image=$(echo "$line" | awk '{print $NF}')
+            else
+                image="$line"
+            fi
+
+            # 获取镜像名和标签
+            if echo "$image" | grep -q ":"; then
+                repo=$(echo "$image" | cut -d':' -f1)
+                tag=$(echo "$image" | cut -d':' -f2)
+            else
+                repo="$image"
+                tag=""
+            fi
+
+            echo "  📦 仓库: $repo"
+            echo "  🏷️  标签: $tag"
+            echo "  🔧 架构: $platform"
+
+            # 判断是否需要更新
+            should_update=false
+            new_line="$line"
+
+            if [[ -z "$tag" ]]; then
+                # 无版本标签，需要添加:latest
+                should_update=true
+                if [[ -n "$platform" ]]; then
+                    new_line="--platform=$platform $repo:latest"
+                else
+                    new_line="$repo:latest"
+                fi
+                echo "  📝 无版本标签，将添加:latest"
+            elif [[ "$tag" == "latest" ]]; then
+                # 已经是latest，无需更改
+                echo "  ✅ 已经是latest版本，无需更新"
+            else
+                # 指定了版本，保持不变
+                echo "  🔒 指定版本 $tag，保持不变"
+            fi
+
+            # 如果需要更新，更新原文件
+            if [[ "$should_update" == true ]]; then
+                sed -i "s|^${line}$|${new_line}|g" $IMAGES_FILE
+                echo "  🔄 已更新: $line → $new_line"
+                UPDATED=true
+            fi
+
+            echo ""
+        done < $IMAGES_FILE
+
+        echo "=============================================================================="
+
+        # 检查是否有更新
+        if [[ "$UPDATED" == true ]]; then
+            echo "🎉 发现镜像更新，开始提交更改..."
+
+            # 检查git状态
+            if [[ -n $(git status --porcelain $IMAGES_FILE) ]]; then
+                echo "📝 正在提交更改..."
+
+                # 配置git用户信息
+                git config --local user.email "action@github.com"
+                git config --local user.name "GitHub Action"
+
+                # 添加并提交更改
+                git add $IMAGES_FILE
+                git commit -m "chore: 自动更新latest版本镜像
+
+                - 为未指定版本的镜像添加 :latest 标签
+                - 保持指定版本的镜像不变
+                - 支持多架构镜像的版本更新
+
+                🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+                Co-Authored-By: GitHub Action <action@github.com>"
+
+                # 推送更改
+                git push
+
+                echo "✅ 更新已成功推送到仓库！"
+
+                # 显示更新对比
+                echo ""
+                echo "📊 更新对比:"
+                echo "=============================================================================="
+                diff -u $BACKUP_FILE $IMAGES_FILE || true
+                echo "=============================================================================="
+
+            else
+                echo "❌ 没有检测到文件变更"
+            fi
+        else
+            echo "👍 所有镜像版本已是最新，无需更新"
+        fi
+
+        # 清理备份文件
+        rm -f $BACKUP_FILE
+        echo "🧹 清理完成"
+
+    - name: Trigger Docker Sync
+      if: success()
+      run: |
+        echo "🚀 触发镜像同步流程..."
+        # 这里可以通过API调用触发docker镜像同步
+        echo "镜像同步将在下一个CI/CD流程中自动执行"
