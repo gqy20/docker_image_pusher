@@ -13,8 +13,7 @@ on:
           - 'true'
   push:
     branches: [ main ]
-    paths:
-      - 'images.txt'  # images.txt变化时触发智能同步
+    # 移除paths限制，允许任意push触发智能同步检查
   schedule:
     # 每天北京时间上午8点执行智能同步检查
     - cron: '0 0 * * *'
