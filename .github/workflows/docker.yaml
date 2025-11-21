@@ -63,8 +63,11 @@ jobs:
 
         echo "🔍 检查images.txt变更情况..."
 
-        # 检查是否存在git历史（首次提交时可能没有）
-        if git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
+        # 获取当前提交的父提交数量
+        PARENT_COUNT=$(git rev-list --count HEAD~1 2>/dev/null || echo "0")
+        echo "📊 Git历史检查: 父提交数量 = $PARENT_COUNT"
+
+        if [[ "$PARENT_COUNT" -gt 0 ]]; then
           echo "📊 检测到git历史，分析变更..."
 
           # 检查images.txt是否有变化
@@ -92,7 +95,7 @@ jobs:
           echo "$CHANGED_IMAGES" > temp_images.txt
           IMAGES_FILE="temp_images.txt"
         else
-          echo "🆕 首次提交，处理所有镜像..."
+          echo "🆕 首次提交或无历史记录，处理所有镜像..."
           IMAGES_FILE="images.txt"
         fi
 
