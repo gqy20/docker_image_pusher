@@ -423,6 +423,37 @@ section h3 {
     border-left-color: #f39c12;
 }
 
+.notification-large {
+    max-width: 450px;
+    padding: 1.25rem;
+}
+
+.notification-content {
+    flex: 1;
+}
+
+.notification-title {
+    font-weight: 500;
+    color: #2c3e50;
+    margin-bottom: 0.25rem;
+}
+
+.notification-message {
+    font-size: 0.9rem;
+    color: #6c757d;
+    line-height: 1.4;
+}
+
+.notification-message a {
+    color: #667eea;
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.notification-message a:hover {
+    text-decoration: underline;
+}
+
 /* 工作流状态显示 */
 .workflow-item {
     background: #f8f9fa;

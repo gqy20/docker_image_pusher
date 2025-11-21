@@ -153,6 +153,40 @@ class GitHubAPI {
         return !!(this.repoOwner && this.token);
     }
 
+    // 创建Issue触发同步（不需要token）
+    async createSyncIssue(imageList) {
+        const issueTitle = '[Docker同步] 镜像同步请求';
+        const issueBody = `## 📦 镜像列表
+
+\`\`\`
+${imageList}
+\`\`\`
+
+### 参数设置
+- 强制更新: false
+- 干运行模式: false
+
+---
+*由 Web 界面自动创建 • ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}*`;
+
+        return this.request(
+            `/repos/${this.repoOwner}/${this.repoName}/issues`,
+            {
+                method: 'POST',
+                body: JSON.stringify({
+                    title: issueTitle,
+                    body: issueBody,
+                    labels: ['sync']
+                })
+            }
+        );
+    }
+
+    // 检查是否可以创建Issue（公共仓库不需要token）
+    canCreateIssue() {
+        return !!this.repoOwner;
+    }
+
     // 通用请求方法
     async request(endpoint, options = {}) {
         const url = `${this.baseURL}${endpoint}`;
@@ -192,7 +226,7 @@ class GitHubAPI {
     // 测试连接
     async testConnection() {
         if (!this.isAuthValid()) {
-            throw new Error('请先配置仓库所有者和GitHub Token');
+            throw new Error('请先配置仓库所有者');
         }
 
         try {
@@ -311,11 +345,10 @@ class GitHubAPI {
     }
 }
 
-// 镜像管理类
+// 镜像管理类（简化版）
 class ImageManager {
     constructor() {
         this.images = [];
-        this.validationResults = [];
     }
 
     // 解析镜像列表
@@ -329,141 +362,14 @@ class ImageManager {
             // 跳过注释和空行
             if (line.startsWith('#') || !line) continue;
 
-            const image = this.parseSingleImage(line);
-            if (image) {
-                image.index = i;
-                images.push(image);
-            }
+            images.push({
+                original: line,
+                index: i
+            });
         }
 
         this.images = images;
         return images;
-    }
-
-    // 解析单个镜像
-    parseSingleImage(imageLine) {
-        let platform = '';
-        let imageName = imageLine;
-
-        // 检测platform参数
-        if (imageLine.includes('--platform')) {
-            const platformMatch = imageLine.match(/--platform[ =](\S+)/);
-            if (platformMatch) {
-                platform = platformMatch[1];
-                imageName = imageLine.replace(/--platform[ =]\S+/, '').trim();
-            }
-        }
-
-        // 验证镜像名称格式
-        const isValid = this.isValidImageName(imageName);
-
-        return {
-            original: imageLine,
-            name: imageName,
-            platform: platform,
-            tag: this.extractTag(imageName),
-            registry: this.extractRegistry(imageName),
-            isValid: isValid,
-            warnings: this.getWarnings(imageName, platform)
-        };
-    }
-
-    // 验证镜像名称格式
-    isValidImageName(imageName) {
-        // 基本Docker镜像名称模式
-        const patterns = [
-            /^[a-z0-9]+(\.[a-z0-9]+)*\/[a-z0-9-._\/]+:[a-zA-Z0-9._-]+$/, // 完整格式
-            /^[a-z0-9-._\/]+:[a-zA-Z0-9._-]+$/, // 简单格式
-            /^[a-z0-9-._\/]+$/, // 无标签格式
-        ];
-
-        // 检查是否符合基本模式
-        const isValid = patterns.some(pattern => pattern.test(imageName));
-
-        // 或者包含已知的注册表
-        const hasKnownRegistry = imageName.includes('gcr.io/') ||
-                               imageName.includes('ghcr.io/') ||
-                               imageName.includes('k8s.gcr.io/') ||
-                               imageName.includes('quay.io/') ||
-                               imageName.includes('docker.io/');
-
-        return isValid || hasKnownRegistry;
-    }
-
-    // 获取警告信息
-    getWarnings(imageName, platform) {
-        const warnings = [];
-
-        if (!imageName.includes(':')) {
-            warnings.push('未指定标签，将使用latest');
-        }
-
-        if (imageName.toLowerCase() === 'latest') {
-            warnings.push('使用latest标签可能导致意外更新');
-        }
-
-        if (platform && !platform.startsWith('linux/')) {
-            warnings.push(`不常见的架构: ${platform}`);
-        }
-
-        return warnings;
-    }
-
-    // 提取标签
-    extractTag(imageName) {
-        const parts = imageName.split(':');
-        return parts.length > 1 ? parts[parts.length - 1] : 'latest';
-    }
-
-    // 提取注册表
-    extractRegistry(imageName) {
-        if (imageName.includes('/')) {
-            const parts = imageName.split('/');
-            if (parts[0].includes('.') || parts[0].includes(':')) {
-                return parts[0];
-            }
-        }
-        return 'docker.io';
-    }
-
-    // 验证镜像列表
-    async validateImages(images) {
-        const results = [];
-
-        for (const image of images) {
-            try {
-                // 简化的验证逻辑（实际项目中可以添加Docker Hub API验证）
-                const result = {
-                    ...image,
-                    status: image.isValid ? 'valid' : 'invalid',
-                    message: image.isValid ? '格式正确' : '格式可能有问题',
-                    exists: true // 假设存在，实际需要API检查
-                };
-
-                results.push(result);
-            } catch (error) {
-                results.push({
-                    ...image,
-                    status: 'error',
-                    message: `验证失败: ${error.message}`,
-                    exists: false
-                });
-            }
-        }
-
-        this.validationResults = results;
-        return results;
-    }
-
-    // 格式化镜像显示
-    formatImageDisplay(image) {
-        let display = image.name;
-
-        if (image.platform) {
-            display = `<span class="platform-tag">${image.platform}</span> ${display}`;
-        }
-
-        return display;
     }
 }
 
@@ -483,13 +389,10 @@ class UIManager {
         this.elements = {
             // 输入相关
             imageInput: document.getElementById('imageInput'),
-            forceUpdate: document.getElementById('forceUpdate'),
-            dryRun: document.getElementById('dryRun'),
             inputSectionHint: document.getElementById('inputSectionHint'),
 
             // 按钮相关
             syncBtn: document.getElementById('syncBtn'),
-            validateBtn: document.getElementById('validateBtn'),
             settingsBtn: document.getElementById('settingsBtn'),
 
             // 状态显示相关
@@ -499,7 +402,6 @@ class UIManager {
 
             // 模态框相关
             settingsModal: document.getElementById('settingsModal'),
-            validationModal: document.getElementById('validationModal'),
             workflowModal: document.getElementById('workflowModal'),
 
             // 设置表单
@@ -510,12 +412,10 @@ class UIManager {
             // 按钮
             testConnectionBtn: document.getElementById('testConnectionBtn'),
             saveSettingsBtn: document.getElementById('saveSettingsBtn'),
-            closeValidationBtn: document.getElementById('closeValidationBtn'),
             viewLogsBtn: document.getElementById('viewLogsBtn'),
             closeWorkflowBtn: document.getElementById('closeWorkflowBtn'),
 
             // 内容显示
-            validationResults: document.getElementById('validationResults'),
             workflowDetails: document.getElementById('workflowDetails')
         };
     }
@@ -524,15 +424,11 @@ class UIManager {
     bindEvents() {
         // 主要操作按钮
         this.elements.syncBtn.addEventListener('click', () => this.handleSync());
-        this.elements.validateBtn.addEventListener('click', () => this.handleValidation());
         this.elements.settingsBtn.addEventListener('click', () => this.showSettings());
 
         // 设置模态框
         this.elements.testConnectionBtn.addEventListener('click', () => this.testConnection());
         this.elements.saveSettingsBtn.addEventListener('click', () => this.saveSettings());
-
-        // 验证模态框
-        this.elements.closeValidationBtn.addEventListener('click', () => this.hideModal('validationModal'));
 
         // 工作流模态框
         this.elements.viewLogsBtn.addEventListener('click', () => this.viewWorkflowLogs());
@@ -585,41 +481,65 @@ class UIManager {
     updateUIState() {
         const canRead = githubAPI.isAuthValid();
         const canWrite = githubAPI.canWrite();
+        const canCreateIssue = githubAPI.canCreateIssue();
 
-        // 更新按钮状态 - 只读模式下禁用同步按钮，但可以查看历史
-        this.elements.syncBtn.disabled = !canWrite;
-        this.elements.validateBtn.disabled = !canWrite;
+        // 更新按钮状态 - 现在支持基于Issue的同步，只需要仓库所有者
+        this.elements.syncBtn.disabled = !canCreateIssue;
 
-        // 显示或隐藏提示信息
-        if (canRead && !canWrite) {
+        // 更新按钮文本
+        if (canCreateIssue && !canWrite) {
+            this.elements.syncBtn.innerHTML = '🐛 创建Issue同步';
             this.elements.inputSectionHint.style.display = 'block';
+            this.elements.inputSectionHint.innerHTML = '💡 使用GitHub Issues触发同步，无需Token！<br>设置仓库所有者即可开始使用。';
+        } else if (canWrite) {
+            this.elements.syncBtn.innerHTML = '🐛 创建Issue同步';
+            this.elements.inputSectionHint.style.display = 'block';
+            this.elements.inputSectionHint.innerHTML = '💡 支持Issue同步和Token直接同步两种模式';
         } else {
-            this.elements.inputSectionHint.style.display = 'none';
+            this.elements.syncBtn.innerHTML = '🐛 创建Issue同步';
+            this.elements.inputSectionHint.style.display = 'block';
+            this.elements.inputSectionHint.innerHTML = '💡 请设置仓库所有者以启用Issue同步功能';
         }
 
         // 更新状态显示
-        this.updateRepoStatus(canRead);
+        this.updateRepoStatus(canRead, canCreateIssue, canWrite);
     }
 
     // 更新仓库状态显示
-    updateRepoStatus(isAuthValid) {
+    updateRepoStatus(isAuthValid, canCreateIssue, canWrite) {
         if (this.githubAPI.repoOwner) {
-            this.elements.repoStatus.innerHTML = `
+            let statusHtml = `
                 <div class="status-indicator status-valid">
                     <span class="status-icon">✅</span>
                     <span class="status-text">${this.githubAPI.repoOwner}/${this.githubAPI.repoName}</span>
                 </div>
-                ${!this.githubAPI.canWrite() ? `
-                    <div class="status-hint">
-                        只读模式 - 需要配置GitHub Token才能执行同步操作
-                    </div>
-                ` : ''}
             `;
 
-            // 如果有token，测试连接
-            if (this.githubAPI.canWrite()) {
-                this.testConnectionSilent();
+            // 根据权限显示不同提示
+            if (canCreateIssue && !canWrite) {
+                statusHtml += `
+                    <div class="status-hint">
+                        🐛 Issue同步模式 - 无需Token，使用Issues触发同步
+                    </div>
+                `;
+            } else if (canWrite) {
+                statusHtml += `
+                    <div class="status-hint">
+                        🚀 完整模式 - 支持直接同步和Issue同步
+                    </div>
+                `;
+            } else {
+                statusHtml += `
+                    <div class="status-hint">
+                        只读模式 - 需要配置仓库所有者才能使用
+                    </div>
+                `;
             }
+
+            this.elements.repoStatus.innerHTML = statusHtml;
+
+            // 测试连接
+            this.testConnectionSilent();
         } else {
             this.elements.repoStatus.innerHTML = `
                 <div class="status-indicator status-invalid">
@@ -745,16 +665,19 @@ class UIManager {
             return;
         }
 
-        if (!token || token === '•'.repeat(10)) {
+        // 处理token输入
+        if (token && token !== '•'.repeat(10)) {
+            // 新token
+            if (!token.startsWith('ghp_')) {
+                Utils.showNotification('GitHub Token格式不正确', 'error');
+                return;
+            }
+        } else if (token === '•'.repeat(10)) {
             // 保持原有token
             token = githubAPI.token;
         } else {
-            // 新token
-        }
-
-        if (!token) {
-            Utils.showNotification('请填写GitHub Token', 'error');
-            return;
+            // 清空token
+            token = '';
         }
 
         try {
@@ -763,7 +686,11 @@ class UIManager {
             // 测试连接
             const result = await githubAPI.testConnection();
             if (result.success) {
-                Utils.showNotification('设置保存成功！', 'success');
+                if (token) {
+                    Utils.showNotification('设置保存成功！已启用完整功能', 'success');
+                } else {
+                    Utils.showNotification('设置保存成功！已启用Issue同步模式', 'success');
+                }
                 this.hideModal('settingsModal');
                 this.updateUIState();
                 await this.loadHistory();
@@ -790,109 +717,71 @@ class UIManager {
             return;
         }
 
-        const forceUpdate = this.elements.forceUpdate.checked;
-        const dryRun = this.elements.dryRun.checked;
-        const imageList = images.map(img => img.original).join(',');
+        const imageList = images.map(img => img.original).join('\n');
 
         this.elements.syncBtn.disabled = true;
-        this.elements.syncBtn.innerHTML = '🔄 启动中...';
+        this.elements.syncBtn.innerHTML = '🔄 创建Issue中...';
 
         try {
-            await githubAPI.triggerManualSync(imageList, forceUpdate, dryRun);
-
+            // 使用Issue触发同步
+            const issue = await githubAPI.createSyncIssue(imageList);
+            const issueUrl = issue.html_url;
             Utils.showNotification(
-                dryRun ? '检测任务已启动' : '同步任务已启动',
+                '同步Issue已创建！GitHub Actions将自动处理',
                 'success'
             );
 
-            this.updateSyncStatus('运行中', 'running');
-
-            // 开始轮询状态
-            this.startStatusPolling();
+            // 显示Issue链接
+            this.showIssueNotification(issueUrl);
 
             // 清空输入框
-            if (!dryRun) {
-                this.elements.imageInput.value = '';
-                this.updateButtonStates();
-            }
+            this.elements.imageInput.value = '';
+            this.updateButtonStates();
+
+            // 在新窗口打开Issue
+            setTimeout(() => {
+                window.open(issueUrl, '_blank');
+            }, 2000);
 
         } catch (error) {
-            Utils.showNotification(`同步启动失败: ${error.message}`, 'error');
+            Utils.showNotification(`创建Issue失败: ${error.message}`, 'error');
             this.elements.syncBtn.disabled = false;
-            this.elements.syncBtn.innerHTML = '🚀 开始同步';
+            this.elements.syncBtn.innerHTML = '🐛 创建Issue同步';
         }
     }
 
-    // 处理验证操作
-    async handleValidation() {
-        const imageText = this.elements.imageInput.value;
-        if (!imageText.trim()) {
-            Utils.showNotification('请输入要验证的镜像列表', 'error');
-            return;
-        }
-
-        this.elements.validateBtn.disabled = true;
-        this.elements.validateBtn.innerHTML = '🔄 验证中...';
-
-        try {
-            const images = imageManager.parseImageList(imageText);
-            const results = await imageManager.validateImages(images);
-
-            this.showValidationResults(results);
-            this.showModal('validationModal');
-
-        } catch (error) {
-            Utils.showNotification(`验证失败: ${error.message}`, 'error');
-        } finally {
-            this.elements.validateBtn.disabled = false;
-            this.elements.validateBtn.innerHTML = '🔍 验证镜像';
-        }
-    }
-
-    // 显示验证结果
-    showValidationResults(results) {
-        const validCount = results.filter(r => r.status === 'valid').length;
-        const invalidCount = results.filter(r => r.status === 'invalid').length;
-        const errorCount = results.filter(r => r.status === 'error').length;
-
-        let html = `
-            <div class="validation-summary">
-                <p>验证完成:
-                    <span class="valid-count">${validCount} 个有效</span>,
-                    <span class="invalid-count">${invalidCount} 个格式问题</span>,
-                    <span class="error-count">${errorCount} 个错误</span>
-                </p>
+    // 显示Issue通知
+    showIssueNotification(issueUrl) {
+        const container = document.getElementById('notificationContainer');
+        const notification = document.createElement('div');
+        notification.className = 'notification notification-info notification-large';
+        notification.innerHTML = `
+            <span class="notification-icon">🐛</span>
+            <div class="notification-content">
+                <div class="notification-title">同步Issue已创建</div>
+                <div class="notification-message">
+                    GitHub Actions将自动处理您的镜像同步请求<br>
+                    <a href="${issueUrl}" target="_blank">点击查看Issue</a>
+                </div>
             </div>
-            <div class="validation-results">
         `;
 
-        results.forEach(image => {
-            const statusClass = image.status === 'valid' ? 'valid' :
-                              image.status === 'invalid' ? 'invalid' : 'error';
+        container.appendChild(notification);
 
-            html += `
-                <div class="image-item">
-                    <span class="image-status ${statusClass}">
-                        ${image.status === 'valid' ? '✅' :
-                          image.status === 'invalid' ? '⚠️' : '❌'}
-                    </span>
-                    <div class="image-info">
-                        <div class="image-name">${image.original}</div>
-                        ${image.warnings.length > 0 ?
-                            `<div class="image-warnings">
-                                ${image.warnings.map(w => `⚠️ ${w}`).join('<br>')}
-                            </div>` : ''
-                        }
-                        <div class="image-message">${image.message}</div>
-                    </div>
-                </div>
-            `;
-        });
-
-        html += '</div>';
-        this.elements.validationResults.innerHTML = html;
+        // 10秒后自动移除
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.style.animation = 'fadeOut 0.3s ease-in-out';
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.remove();
+                    }
+                }, 300);
+            }
+        }, 10000);
     }
 
+    
     // 更新同步状态
     updateSyncStatus(status, type = 'info') {
         const statusHtml = `

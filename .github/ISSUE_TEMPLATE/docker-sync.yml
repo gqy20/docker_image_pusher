@@ -1,0 +1,42 @@
+---
+name: Docker镜像同步
+description: 创建一个 Docker 镜像同步请求
+title: "[Docker同步] 镜像同步请求"
+labels: ["sync"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 🐳 Docker 镜像同步请求
+        请在下方填写需要同步的镜像列表，格式与 `images.txt` 文件相同。
+
+  - type: textarea
+    id: images
+    attributes:
+      label: "📦 镜像列表"
+      description: "每行一个镜像，支持格式：`镜像名:标签` 或 `--platform=架构 镜像名:标签`"
+      placeholder: |
+        nginx:latest
+        redis:7.0
+        ubuntu:22.04
+        --platform=linux/arm64 node:18
+        k8s.gcr.io/pause:3.9
+      render: bash
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+
+        ### 📋 说明
+        - 此请求将触发 GitHub Actions 自动同步镜像
+        - 同步进度和结果将在此 Issue 中显示
+        - 全部成功后 Issue 会自动关闭
+        - 支持的格式与项目根目录 `images.txt` 完全相同
+
+        ### ⚠️ 注意事项
+        - 请确保镜像格式正确
+        - 支持多平台架构同步
+        - 同步过程可能需要较长时间，请耐心等待

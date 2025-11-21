@@ -51,27 +51,11 @@ k8s.gcr.io/pause:3.9"></textarea>
                 </div>
             </div>
 
-            <!-- 选项设置 -->
-            <div class="options">
-                <label class="checkbox-label">
-                    <input type="checkbox" id="forceUpdate">
-                    <span class="checkmark"></span>
-                    强制更新已存在镜像
-                </label>
-                <label class="checkbox-label">
-                    <input type="checkbox" id="dryRun">
-                    <span class="checkmark"></span>
-                    仅检测模式（不实际同步）
-                </label>
-            </div>
-
+  
             <!-- 操作按钮 -->
             <div class="actions">
-                <button id="validateBtn" class="btn btn-secondary" disabled>
-                    🔍 验证镜像
-                </button>
                 <button id="syncBtn" class="btn btn-primary" disabled>
-                    🚀 开始同步
+                    🐛 创建Issue同步
                 </button>
             </div>
         </section>
@@ -119,9 +103,10 @@ k8s.gcr.io/pause:3.9"></textarea>
                     <label for="githubToken">GitHub Personal Access Token：</label>
                     <input type="password" id="githubToken" placeholder="ghp_xxxxxxxxxxxx">
                     <div class="form-hint">
-                        需要repo权限，仅存储在浏览器本地<br>
-                        <a href="https://github.com/settings/tokens/new" target="_blank">创建Token</a>
-                    </div>
+                    GitHub Token（可选）：无需Token即可使用Issue同步<br>
+                    有Token可启用额外功能，仅存储在浏览器本地<br>
+                    <a href="https://github.com/settings/tokens/new" target="_blank">创建Token</a>
+                </div>
                 </div>
 
                 <div class="form-group">
@@ -138,22 +123,7 @@ k8s.gcr.io/pause:3.9"></textarea>
         </div>
     </div>
 
-    <!-- 验证结果模态对话框 -->
-    <div id="validationModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>🔍 镜像验证结果</h3>
-                <span class="close" data-modal="validationModal">&times;</span>
-            </div>
-            <div class="modal-body">
-                <div id="validationResults"></div>
-                <div class="modal-actions">
-                    <button id="closeValidationBtn" class="btn btn-primary">关闭</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
+  
     <!-- 工作流详情模态对话框 -->
     <div id="workflowModal" class="modal">
         <div class="modal-content modal-large">

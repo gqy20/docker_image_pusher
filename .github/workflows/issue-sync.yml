@@ -1,0 +1,192 @@
+name: Issue Triggered Sync
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    if: contains(github.event.issue.labels.*.name, 'sync') && github.event.issue.state == 'open'
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Maximize build space
+      uses: easimon/maximize-build-space@master
+      with:
+        root-reserve-mb: 2048
+        swap-size-mb: 128
+        remove-dotnet: 'true'
+        remove-haskell: 'true'
+        build-mount-path: '/var/lib/docker/'
+
+    - name: Restart docker
+      run: sudo service docker restart
+
+    - name: Docker Setup Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Extract images from issue
+      id: extract
+      run: |
+        # 从 issue body 中提取镜像列表，格式与 images.txt 相同
+        echo "Extracting images from issue..."
+
+        # 提取代码块中的内容，或者提取所有行
+        IMAGES=$(echo '${{ github.event.issue.body }}' | sed -n '/```/,/```/p' | sed '1d;$d' || echo '${{ github.event.issue.body }}')
+
+        # 过滤出有效的镜像行（排除空行和注释）
+        echo "$IMAGES" | grep -v '^#' | grep -v '^$' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' > issue_images.txt
+
+        # 显示提取的镜像
+        echo "Found images to sync:"
+        cat issue_images.txt
+
+        # 设置输出变量
+        IMAGE_COUNT=$(cat issue_images.txt | grep -v '^$' | wc -l)
+        echo "image_count=$IMAGE_COUNT" >> $GITHUB_OUTPUT
+
+        if [ $IMAGE_COUNT -eq 0 ]; then
+          echo "No valid images found in issue"
+          exit 1
+        fi
+
+    - name: Add initial comment
+      uses: actions/github-script@v7
+      with:
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: `## 🚀 开始同步镜像\n\n检测到 **${{ steps.extract.outputs.image_count }}** 个镜像需要同步：\n\n\`\`\`\n${{ steps.extract.outputs.image_count }}\n\`\`\`\n\n正在准备同步环境，请稍候...`
+          });
+
+    - name: Docker login and sync
+      run: |
+        set +e
+
+        # 登录阿里云仓库
+        docker login -u $ALIYUN_REGISTRY_USER -p $ALIYUN_REGISTRY_PASSWORD $ALIYUN_REGISTRY
+
+        echo "🔍 开始镜像同步..."
+        echo "=============================================================================="
+
+        TOTAL_COUNT=0
+        SUCCESS_COUNT=0
+
+        while IFS= read -r line || [ -n "$line" ]; do
+          # 忽略空行与注释
+          [[ -z "$line" ]] && continue
+          if echo "$line" | grep -q '^\s*#'; then
+            continue
+          fi
+
+          ((TOTAL_COUNT++))
+          echo ""
+          echo "📦 处理镜像 [$TOTAL_COUNT]: $line"
+
+          # 检查是否包含平台参数
+          PLATFORM_PARAM=""
+          IMAGE_NAME="$line"
+          if echo "$line" | grep -q -- '--platform'; then
+            PLATFORM_PARAM=$(echo "$line" | awk -F'--platform[ =]' '{if (NF>1) print $2}' | awk '{print $1}')
+            IMAGE_NAME=$(echo "$line" | awk '{print $NF}')
+          fi
+
+          echo "🔄 docker pull $line"
+          if docker pull $line; then
+            echo "✅ 拉取成功"
+
+            # 生成目标镜像名
+            if [ -n "$PLATFORM_PARAM" ]; then
+              PLATFORM_PREFIX="${PLATFORM_PARAM//\//_}_"
+            else
+              PLATFORM_PREFIX=""
+            fi
+
+            # 获取镜像基本信息
+            IMAGE_NAME_TAG=$(echo "$IMAGE_NAME" | awk -F'/' '{print $NF}')
+            NEW_IMAGE="$ALIYUN_REGISTRY/$ALIYUN_NAME_SPACE/$PLATFORM_PREFIX$IMAGE_NAME_TAG"
+
+            echo "🏷️  docker tag $IMAGE_NAME $NEW_IMAGE"
+            docker tag $IMAGE_NAME $NEW_IMAGE
+
+            echo "📤 docker push $NEW_IMAGE"
+            if docker push $NEW_IMAGE; then
+              ((SUCCESS_COUNT++))
+              echo "✅ 推送成功: $NEW_IMAGE"
+            else
+              echo "❌ 推送失败: $NEW_IMAGE"
+            fi
+
+            # 清理本地镜像
+            echo "🧹 清理本地镜像..."
+            docker rmi $IMAGE_NAME 2>/dev/null || true
+            docker rmi $NEW_IMAGE 2>/dev/null || true
+
+          else
+            echo "❌ 拉取失败: $line"
+          fi
+
+        done < issue_images.txt
+
+        echo ""
+        echo "=============================================================================="
+        echo "📊 同步完成统计:"
+        echo "  📋 处理总数: $TOTAL_COUNT 个镜像"
+        echo "  ✅ 成功同步: $SUCCESS_COUNT 个镜像"
+        echo "  ❌ 失败数量: $((TOTAL_COUNT - SUCCESS_COUNT)) 个镜像"
+        echo "=============================================================================="
+
+        # 保存结果用于评论
+        echo "total_count=$TOTAL_COUNT" >> $GITHUB_ENV
+        echo "success_count=$SUCCESS_COUNT" >> $GITHUB_ENV
+
+    - name: Add final comment
+      if: always()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const totalCount = process.env.TOTAL_COUNT || 0;
+          const successCount = process.env.SUCCESS_COUNT || 0;
+          const failedCount = totalCount - successCount;
+
+          let statusEmoji = '✅';
+          let statusText = '全部成功';
+
+          if (failedCount > 0) {
+            if (successCount === 0) {
+              statusEmoji = '❌';
+              statusText = '全部失败';
+            } else {
+              statusEmoji = '⚠️';
+              statusText = '部分成功';
+            }
+          }
+
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: `## ${statusEmoji} 同步完成\n\n**状态**: ${statusText}\n\n📊 **同步统计**:\n- 📋 处理总数: ${totalCount} 个镜像\n- ✅ 成功同步: ${successCount} 个镜像\n- ❌ 失败数量: ${failedCount} 个镜像\n\n---
+*由 GitHub Actions 自动处理 • ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}*`
+          });
+
+          // 如果全部成功，关闭 issue
+          if (failedCount === 0 && parseInt(totalCount) > 0) {
+            github.rest.issues.update({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'closed'
+            });
+          }
+
+    env:
+      ALIYUN_REGISTRY: ${{ secrets.ALIYUN_REGISTRY }}
+      ALIYUN_NAME_SPACE: ${{ secrets.ALIYUN_NAME_SPACE }}
+      ALIYUN_REGISTRY_USER: ${{ secrets.ALIYUN_REGISTRY_USER }}
+      ALIYUN_REGISTRY_PASSWORD: ${{ secrets.ALIYUN_REGISTRY_PASSWORD }}
