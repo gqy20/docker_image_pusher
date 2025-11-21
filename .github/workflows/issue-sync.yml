@@ -61,7 +61,7 @@ jobs:
             issue_number: context.issue.number,
             owner: context.repo.owner,
             repo: context.repo.repo,
-            body: `## 🚀 开始同步镜像\n\n检测到 **${{ steps.extract.outputs.image_count }}** 个镜像需要同步：\n\n\`\`\`\n${{ github.event.issue.body }}\n\`\`\`\n\n正在准备同步环境，请稍候...`
+            body: `## 🚀 开始同步镜像\n\n检测到 **${{ steps.extract.outputs.image_count }}** 个镜像需要同步：\n\n正在准备同步环境，请稍候...`
           });
 
     - name: Docker login and sync
@@ -167,11 +167,13 @@ jobs:
             }
           }
 
+          const timestamp = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
+
           github.rest.issues.createComment({
             issue_number: context.issue.number,
             owner: context.repo.owner,
             repo: context.repo.repo,
-            body: `## ${statusEmoji} 同步完成\n\n**状态**: ${statusText}\n\n📊 **同步统计**:\n- 📋 处理总数: ${totalCount} 个镜像\n- ✅ 成功同步: ${successCount} 个镜像\n- ❌ 失败数量: ${failedCount} 个镜像\n\n---\n*由 GitHub Actions 自动处理 • ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}*`
+            body: `## ${statusEmoji} 同步完成\n\n**状态**: ${statusText}\n\n📊 **同步统计**:\n- 📋 处理总数: ${totalCount} 个镜像\n- ✅ 成功同步: ${successCount} 个镜像\n- ❌ 失败数量: ${failedCount} 个镜像\n\n---\n*由 GitHub Actions 自动处理 • ${timestamp}*`
           });
 
           // 如果全部成功，关闭 issue
