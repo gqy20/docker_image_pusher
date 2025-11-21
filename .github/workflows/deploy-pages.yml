@@ -8,6 +8,11 @@ on:
       - 'web/**'
   # 手动触发部署
   workflow_dispatch:
+    inputs:
+      reason:
+        description: '部署原因'
+        required: false
+        default: '手动部署'
 
 # 设置权限
 permissions:
