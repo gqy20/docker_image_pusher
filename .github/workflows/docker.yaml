@@ -99,32 +99,57 @@ jobs:
         # 构建认证token
         AUTH_TOKEN=$(echo -n "$ALIYUN_REGISTRY_USER:$ALIYUN_REGISTRY_PASSWORD" | base64)
 
-        # 获取命名空间信息
-        echo "🔍 获取命名空间信息..."
-        NAMESPACE_RESPONSE=$(curl -s -H "Authorization: Basic $AUTH_TOKEN" \
-            "$NAMESPACE_API/$ALIYUN_NAME_SPACE/repositories?page=1&page_size=100" || echo "{}")
+        # 简化的仓库检测方法
+        echo "🔍 使用Docker检测现有镜像..."
 
-        # 解析JSON响应获取仓库列表
-        if echo "$NAMESPACE_RESPONSE" | grep -q '"repositories"'; then
-            echo "✅ 成功获取仓库列表"
+        # 临时存储已检测到的镜像
+        EXISTING_IMAGES=""
 
-            # 提取仓库名称
-            EXISTING_REPOS=$(echo "$NAMESPACE_RESPONSE" | grep -o '"name":"[^"]*"' | sed 's/"name":"//g' | sed 's/"//g' || echo "")
-
-            if [[ -n "$EXISTING_REPOS" ]]; then
-                echo "📦 发现现有仓库:"
-                echo "$EXISTING_REPOS" | while read repo; do
-                    if [[ -n "$repo" ]]; then
-                        echo "  - $repo"
-                    fi
-                done
-            else
-                echo "ℹ️  命名空间中暂无仓库"
+        # 尝试检测一些已知镜像是否存在
+        while IFS= read -r line || [ -n "$line" ]; do
+            # 忽略空行与注释
+            [[ -z "$line" ]] && continue
+            if echo "$line" | grep -q '^\s*#'; then
+                continue
             fi
-        else
-            echo "⚠️  获取仓库列表失败，将进行全量同步"
-            EXISTING_REPOS=""
-        fi
+
+            # 提取镜像信息
+            if echo "$line" | grep -q -- '--platform'; then
+                image=$(echo "$line" | awk '{print $NF}')
+            else
+                image="$line"
+            fi
+
+            # 解析镜像名和标签
+            if echo "$image" | grep -q ":"; then
+                repo_part=$(echo "$image" | cut -d':' -f1)
+                tag_part=$(echo "$image" | cut -d':' -f2)
+            else
+                repo_part="$image"
+                tag_part="latest"
+            fi
+
+            # 获取最终镜像名（去除命名空间前缀）
+            final_name=$(echo "$repo_part" | awk -F'/' '{print $NF}')
+            final_image="$ALIYUN_REGISTRY/$ALIYUN_NAME_SPACE/$final_name:$tag_part"
+
+            echo "🔍 检测镜像: $final_image"
+
+            # 使用docker manifest检查镜像是否存在
+            if docker manifest inspect $final_image >/dev/null 2>&1; then
+                echo "✅ 镜像已存在: $final_image"
+                if [[ -n "$EXISTING_IMAGES" ]]; then
+                    EXISTING_IMAGES="$EXISTING_IMAGES$final_name"$'\n'
+                else
+                    EXISTING_IMAGES="$EXISTING_IMAGES$final_name"$'\n'
+                fi
+            else
+                echo "❌ 镜像不存在: $final_image"
+            fi
+        done < images.txt
+
+        echo "📦 Docker检测结果完成"
+        EXISTING_REPOS="$EXISTING_IMAGES"
 
         echo "=============================================================================="
 
@@ -167,7 +192,7 @@ jobs:
             final_image="${final_name}:${tag_part}"
 
             # 处理重名镜像
-            if echo "$EXISTING_REPOS" | grep -q "^$final_name$"; then
+            if echo "$EXISTING_IMAGES" | grep -q "^$final_name$"; then
                 echo "✅ 镜像已存在: $final_image"
                 # 这里可以进一步检查标签是否需要更新
                 # 暂时假设已存在的镜像不需要更新
