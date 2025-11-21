@@ -40,12 +40,15 @@ jobs:
         # 过滤出有效的镜像行（排除空行和注释）
         echo "$IMAGES" | grep -v '^#' | grep -v '^$' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' > issue_images.txt
 
-        # 显示提取的镜像
-        echo "Found images to sync:"
+        # 显示提取的镜像和调试信息
+        echo "Raw extracted images:"
+        echo "$IMAGES"
+        echo "Filtered images to sync:"
         cat issue_images.txt
-
-        # 设置输出变量 - 只计算非空行
+        echo "Valid image count:"
         VALID_IMAGES=$(cat issue_images.txt | grep -v '^$' | wc -l)
+        echo "$VALID_IMAGES"
+
         echo "image_count=$VALID_IMAGES" >> $GITHUB_OUTPUT
 
         if [ $VALID_IMAGES -eq 0 ]; then
@@ -135,7 +138,7 @@ jobs:
         echo "  ❌ 失败数量: $((TOTAL_COUNT - SUCCESS_COUNT)) 个镜像"
         echo "=============================================================================="
 
-        # 保存结果用于评论
+        # 保存结果用于评论 - 确保计数一致
         echo "total_count=$TOTAL_COUNT" >> $GITHUB_ENV
         echo "success_count=$SUCCESS_COUNT" >> $GITHUB_ENV
 
