@@ -8,3 +8,4 @@ redis:latest
 postgres:15-alpine
 mysql:8.0
 ubuntu:latest
+alpine:latest
