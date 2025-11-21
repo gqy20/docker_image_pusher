@@ -70,6 +70,7 @@ jobs:
 
     - name: Build and push image Aliyun
       run: |
+        set +e  # 临时禁用严格模式以避免脚本意外退出
         docker login -u $ALIYUN_REGISTRY_USER -p $ALIYUN_REGISTRY_PASSWORD $ALIYUN_REGISTRY
 
         echo "🔍 智能镜像同步系统启动..."
