@@ -585,9 +585,12 @@ class UIManager {
             this.testConnectionSilent();
         } else {
             this.elements.repoStatus.innerHTML = `
-                <div class="status-indicator status-invalid">
-                    <span class="status-icon">❌</span>
+                <div class="status-indicator status-unknown">
+                    <span class="status-icon">❓</span>
                     <span class="status-text">未配置</span>
+                </div>
+                <div class="status-hint">
+                    请点击右上角"设置"按钮配置GitHub认证信息
                 </div>
             `;
         }

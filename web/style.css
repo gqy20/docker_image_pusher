@@ -102,6 +102,13 @@ section h3 {
     font-size: 1.2rem;
 }
 
+.status-hint {
+    margin-top: 0.5rem;
+    font-size: 0.875rem;
+    color: #6c757d;
+    font-style: italic;
+}
+
 .status-unknown { color: #f39c12; }
 .status-valid { color: #27ae60; }
 .status-invalid { color: #e74c3c; }
