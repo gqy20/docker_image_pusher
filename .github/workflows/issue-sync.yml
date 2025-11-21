@@ -43,16 +43,26 @@ jobs:
         # 显示提取的镜像和调试信息
         echo "Raw extracted images:"
         echo "$IMAGES"
+        echo "---"
         echo "Filtered images to sync:"
         cat issue_images.txt
+        echo "---"
         echo "Valid image count:"
         VALID_IMAGES=$(cat issue_images.txt | grep -v '^$' | wc -l)
         echo "$VALID_IMAGES"
+        echo "---"
+        echo "File content check:"
+        echo "File exists: $(test -f issue_images.txt && echo 'YES' || echo 'NO')"
+        echo "File size: $(test -f issue_images.txt && wc -l < issue_images.txt || echo '0')"
+        echo "File content:"
+        test -f issue_images.txt && hexdump -C issue_images.txt | head -5 || echo "No file"
 
         echo "image_count=$VALID_IMAGES" >> $GITHUB_OUTPUT
 
         if [ $VALID_IMAGES -eq 0 ]; then
           echo "No valid images found in issue"
+          echo "Issue body preview:"
+          echo '${{ github.event.issue.body }}' | head -10
           exit 1
         fi
 
