@@ -36,9 +36,9 @@ jobs:
 
         # 使用更可靠的方法提取代码块中的内容
         # 将issue body写入临时文件
-        cat << 'EOF' > issue_body.txt
-${{ github.event.issue.body }}
-EOF
+        cat > issue_body.txt << 'BODY_EOF'
+        ${{ github.event.issue.body }}
+        BODY_EOF
 
         # 提取代码块中的内容
         IMAGES=$(sed -n '/```/,/```/p' issue_body.txt | sed '1d;$d')
