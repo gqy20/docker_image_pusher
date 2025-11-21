@@ -75,28 +75,11 @@ jobs:
         echo "🔍 智能镜像同步系统启动..."
         echo "=============================================================================="
 
-        # 从环境变量解析阿里云仓库地址
-        if [[ "$ALIYUN_REGISTRY" =~ ^registry\.([^.]+)\.aliyuncs\.com$ ]]; then
-            REGION="${BASH_REMATCH[1]}"
-            echo "📍 检测到阿里云区域: $REGION"
-        else
-            echo "⚠️  无法解析阿里云区域，使用默认: hangzhou"
-            REGION="hangzhou"
-        fi
-
-        # 阿里云容器镜像服务API基础URL
-        API_BASE="https://cr.$REGION.aliyuncs.com/v2"
-        NAMESPACE_API="https://cr.$REGION.aliyuncs.com/v2/namespaces"
-
-        echo "🔗 API地址: $API_BASE"
         echo "📂 命名空间: $ALIYUN_NAME_SPACE"
         echo "=============================================================================="
 
         # 获取阿里云仓库中已有的镜像列表
         echo "📊 正在查询阿里云仓库中的镜像..."
-
-        # 构建认证token
-        AUTH_TOKEN=$(echo -n "$ALIYUN_REGISTRY_USER:$ALIYUN_REGISTRY_PASSWORD" | base64)
 
         # 简化的仓库检测方法
         echo "🔍 使用Docker检测现有镜像..."
