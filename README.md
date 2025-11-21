@@ -71,7 +71,7 @@ k8s.gcr.io/kube-state-metrics/kube-state-metrics:v1.9.0
 ghcr.io/user/repo:tag
 ```
 
-![](doc/images.png)
+<img src="doc/images.png" alt="images.txt配置示例" width="600"/>
 
 ### 4. 启动同步
 
@@ -83,11 +83,11 @@ ghcr.io/user/repo:tag
 
 1. **创建命名空间**
 
-   ![](doc/命名空间.png)
+   <img src="doc/命名空间.png" alt="创建命名空间" width="600"/>
 
 2. **获取访问凭证**
 
-   ![](doc/用户名密码.png)
+   <img src="doc/用户名密码.png" alt="获取访问凭证" width="600"/>
 
 ### GitHub Action 配置
 
@@ -97,7 +97,7 @@ ghcr.io/user/repo:tag
 
 2. **配置环境变量**
 
-   ![](doc/配置环境变量.png)
+   <img src="doc/配置环境变量.png" alt="配置环境变量" width="600"/>
 
 ## 📝 使用说明
 
@@ -148,7 +148,7 @@ docker pull registry.cn-hangzhou.aliyuncs.com/my-namespace/nginx:latest
 registry.cn-hangzhou.aliyuncs.com/namespace/linux_arm64_nginx:latest
 ```
 
-![](doc/多架构.png)
+<img src="doc/多架构.png" alt="多架构支持示例" width="600"/>
 
 ### 镜像重名处理
 
@@ -160,7 +160,7 @@ xhofe/alist           # 同步为 xhofe_alist
 xiaoyaliu/alist       # 同步为 xiaoyaliu_alist
 ```
 
-![](doc/镜像重名.png)
+<img src="doc/镜像重名.png" alt="镜像重名处理示例" width="600"/>
 
 ### 定时同步
 
@@ -176,13 +176,13 @@ on:
   workflow_dispatch:
 ```
 
-![](doc/定时执行.png)
+<img src="doc/定时执行.png" alt="定时执行配置" width="600"/>
 
 ### 镜像状态查看
 
 回到阿里云镜像仓库，可以查看镜像同步状态。可以将镜像设为公开，实现免登录拉取。
 
-![](doc/开始使用.png)
+<img src="doc/开始使用.png" alt="镜像状态查看" width="600"/>
 
 ## ❓ 常见问题
 
