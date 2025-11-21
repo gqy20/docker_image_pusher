@@ -109,6 +109,16 @@ section h3 {
     font-style: italic;
 }
 
+.input-section-hint {
+    background: #e3f2fd;
+    border-left: 4px solid #2196f3;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border-radius: 4px;
+    color: #1565c0;
+    font-size: 0.9rem;
+}
+
 .status-unknown { color: #f39c12; }
 .status-valid { color: #27ae60; }
 .status-invalid { color: #e74c3c; }

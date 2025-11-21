@@ -114,10 +114,22 @@ const Utils = {
 class GitHubAPI {
     constructor() {
         this.baseURL = 'https://api.github.com';
-        this.repoOwner = Utils.storage.get('repo_owner', '');
         this.repoName = 'docker_image_pusher';
+
+        // 自动检测仓库所有者
+        const hostname = window.location.hostname;
+        if (hostname.includes('github.io')) {
+            // 从 gqy20.github.io 提取 gqy20
+            this.repoOwner = hostname.split('.')[0];
+        } else {
+            this.repoOwner = Utils.storage.get('repo_owner', '');
+        }
+
+        // 尝试从localStorage读取token
         this.token = Utils.storage.get('github_token', '');
         this.refreshInterval = Utils.storage.get('refresh_interval', 5) * 1000;
+
+        console.log('检测到仓库所有者:', this.repoOwner);
     }
 
     // 设置认证信息
@@ -133,6 +145,11 @@ class GitHubAPI {
 
     // 检查认证是否有效
     isAuthValid() {
+        return !!(this.repoOwner);
+    }
+
+    // 检查是否可以执行写操作（需要token）
+    canWrite() {
         return !!(this.repoOwner && this.token);
     }
 
@@ -141,9 +158,13 @@ class GitHubAPI {
         const url = `${this.baseURL}${endpoint}`;
         const headers = {
             'Accept': 'application/vnd.github.v3+json',
-            'Authorization': `token ${this.token}`,
             ...options.headers
         };
+
+        // 只有有token时才添加Authorization头
+        if (this.token) {
+            headers['Authorization'] = `token ${this.token}`;
+        }
 
         try {
             const response = await fetch(url, { ...options, headers });
@@ -464,6 +485,7 @@ class UIManager {
             imageInput: document.getElementById('imageInput'),
             forceUpdate: document.getElementById('forceUpdate'),
             dryRun: document.getElementById('dryRun'),
+            inputSectionHint: document.getElementById('inputSectionHint'),
 
             // 按钮相关
             syncBtn: document.getElementById('syncBtn'),
@@ -545,7 +567,7 @@ class UIManager {
         // 更新UI状态
         this.updateUIState();
 
-        // 如果已认证，加载历史记录
+        // 如果能读取仓库信息，加载历史记录和当前镜像配置
         if (githubAPI.isAuthValid()) {
             await this.loadHistory();
             await this.loadCurrentImages();
@@ -561,36 +583,51 @@ class UIManager {
 
     // 更新UI状态
     updateUIState() {
-        const isAuthValid = githubAPI.isAuthValid();
+        const canRead = githubAPI.isAuthValid();
+        const canWrite = githubAPI.canWrite();
 
-        // 更新按钮状态
-        this.elements.syncBtn.disabled = !isAuthValid;
-        this.elements.validateBtn.disabled = !isAuthValid;
+        // 更新按钮状态 - 只读模式下禁用同步按钮，但可以查看历史
+        this.elements.syncBtn.disabled = !canWrite;
+        this.elements.validateBtn.disabled = !canWrite;
+
+        // 显示或隐藏提示信息
+        if (canRead && !canWrite) {
+            this.elements.inputSectionHint.style.display = 'block';
+        } else {
+            this.elements.inputSectionHint.style.display = 'none';
+        }
 
         // 更新状态显示
-        this.updateRepoStatus(isAuthValid);
+        this.updateRepoStatus(canRead);
     }
 
     // 更新仓库状态显示
     updateRepoStatus(isAuthValid) {
-        if (isAuthValid) {
+        if (this.githubAPI.repoOwner) {
             this.elements.repoStatus.innerHTML = `
-                <div class="status-indicator status-loading">
-                    <span class="status-icon">🔄</span>
-                    <span class="status-text">连接中...</span>
+                <div class="status-indicator status-valid">
+                    <span class="status-icon">✅</span>
+                    <span class="status-text">${this.githubAPI.repoOwner}/${this.githubAPI.repoName}</span>
                 </div>
+                ${!this.githubAPI.canWrite() ? `
+                    <div class="status-hint">
+                        只读模式 - 需要配置GitHub Token才能执行同步操作
+                    </div>
+                ` : ''}
             `;
 
-            // 测试连接
-            this.testConnectionSilent();
+            // 如果有token，测试连接
+            if (this.githubAPI.canWrite()) {
+                this.testConnectionSilent();
+            }
         } else {
             this.elements.repoStatus.innerHTML = `
-                <div class="status-indicator status-unknown">
-                    <span class="status-icon">❓</span>
-                    <span class="status-text">未配置</span>
+                <div class="status-indicator status-invalid">
+                    <span class="status-icon">❌</span>
+                    <span class="status-text">无法检测仓库信息</span>
                 </div>
                 <div class="status-hint">
-                    请点击右上角"设置"按钮配置GitHub认证信息
+                    请确保通过GitHub Pages访问此页面
                 </div>
             `;
         }
@@ -900,7 +937,14 @@ class UIManager {
     // 加载历史记录
     async loadHistory() {
         try {
-            const runs = await githubAPI.getAllWorkflowRuns(10);
+            let runs;
+            if (githubAPI.canWrite()) {
+                // 有token时获取完整信息
+                runs = await githubAPI.getAllWorkflowRuns(10);
+            } else {
+                // 无token时获取公开工作流信息
+                runs = await githubAPI.request(`/repos/${githubAPI.repoOwner}/${githubAPI.repoName}/actions/runs?per_page=10`);
+            }
             this.displayHistory(runs.workflow_runs || []);
         } catch (error) {
             console.warn('加载历史记录失败:', error);
