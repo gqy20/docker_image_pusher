@@ -1,7 +1,9 @@
+--platform=linux/arm64 xiaoyaliu/alist
 nginx
 n8nio/n8n:1.121.2
-#支持私库
 k8s.gcr.io/kube-state-metrics/kube-state-metrics:v2.0.0
 xhofe/alist:latest
-#支持指定架构
---platform=linux/arm64 xiaoyaliu/alist
+xiaoyaliu/alist
+redis:latest
+postgres:15-alpine
+mysql:8.0

@@ -1,80 +1,259 @@
 # Docker Images Pusher
 
-使用Github Action将国外的Docker镜像转存到阿里云私有仓库，供国内服务器使用，免费易用<br>
-- 支持DockerHub, gcr.io, k8s.io, ghcr.io等任意仓库<br>
-- 支持最大40GB的大型镜像<br>
-- 使用阿里云的官方线路，速度快<br>
+[![GitHub stars](https://img.shields.io/github/stars/gqy20/docker_image_pusher?style=social)](https://github.com/gqy20/docker_image_pusher/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/gqy20/docker_image_pusher?style=social)](https://github.com/gqy20/docker_image_pusher/network)
+[![GitHub license](https://img.shields.io/github/license/gqy20/docker_image_pusher)](https://github.com/gqy20/docker_image_pusher/blob/main/LICENSE)
 
-视频教程：https://www.bilibili.com/video/BV1Zn4y19743/
+> 使用 GitHub Action 将国外的 Docker 镜像转存到阿里云私有仓库，供国内服务器使用，免费易用
 
-作者：**[技术爬爬虾](https://github.com/tech-shrimp/me)**<br>
-B站，抖音，Youtube全网同名，转载请注明作者<br>
+**原作作者：[技术爬爬虾](https://github.com/tech-shrimp/me)** | Fork 自原作并进行优化改进
 
-## 使用方式
+## ✨ 特性
 
+- 🚀 **多仓库支持** - 支持 DockerHub、gcr.io、k8s.io、ghcr.io 等任意仓库
+- 📦 **大镜像支持** - 支持最大 40GB 的大型镜像
+- ⚡ **高速传输** - 使用阿里云官方线路，速度快
+- 🏗️ **多架构支持** - 支持 AMD64、ARM64 等多种架构
+- 🔄 **自动化同步** - 支持定时自动同步更新
+- 📝 **智能重名处理** - 自动处理镜像重名情况
+- 🎯 **零成本使用** - 完全免费，无需服务器
 
-### 配置阿里云
-登录阿里云容器镜像服务<br>
-https://cr.console.aliyun.com/<br>
-启用个人实例，创建一个命名空间（**ALIYUN_NAME_SPACE**）
-![](/doc/命名空间.png)
+## 📺 视频教程
 
-访问凭证–>获取环境变量<br>
-用户名（**ALIYUN_REGISTRY_USER**)<br>
-密码（**ALIYUN_REGISTRY_PASSWORD**)<br>
-仓库地址（**ALIYUN_REGISTRY**）<br>
+[B站视频教程](https://www.bilibili.com/video/BV1Zn4y19743/)
 
-![](/doc/用户名密码.png)
+## 📖 目录
 
+- [快速开始](#-快速开始)
+- [详细配置](#-详细配置)
+- [使用说明](#-使用说明)
+- [高级功能](#-高级功能)
+- [常见问题](#-常见问题)
+- [贡献指南](#-贡献指南)
 
-### Fork本项目
-Fork本项目<br>
-#### 启动Action
-进入您自己的项目，点击Action，启用Github Action功能<br>
-#### 配置环境变量
-进入Settings->Secret and variables->Actions->New Repository secret
-![](doc/配置环境变量.png)
-将上一步的**四个值**<br>
-ALIYUN_NAME_SPACE,ALIYUN_REGISTRY_USER，ALIYUN_REGISTRY_PASSWORD，ALIYUN_REGISTRY<br>
-配置成环境变量
+## 🚀 快速开始
 
-### 添加镜像
-打开images.txt文件，添加你想要的镜像 
-可以加tag，也可以不用(默认latest)<br>
-可添加 --platform=xxxxx 的参数指定镜像架构<br>
-可使用 k8s.gcr.io/kube-state-metrics/kube-state-metrics 格式指定私库<br>
-可使用 #开头作为注释<br>
+### 1. 配置阿里云
+
+登录 [阿里云容器镜像服务](https://cr.console.aliyun.com/)，启用个人实例并创建命名空间。
+
+**获取凭证信息：**
+- 命名空间：`ALIYUN_NAME_SPACE`
+- 用户名：`ALIYUN_REGISTRY_USER`
+- 密码：`ALIYUN_REGISTRY_PASSWORD`
+- 仓库地址：`ALIYUN_REGISTRY`
+
+### 2. Fork 并配置项目
+
+1. Fork 本项目到你的 GitHub 账户
+2. 进入项目的 Settings → Secrets and variables → Actions
+3. 添加以下 Repository secrets：
+
+| 名称 | 描述 |
+|------|------|
+| `ALIYUN_NAME_SPACE` | 阿里云命名空间 |
+| `ALIYUN_REGISTRY_USER` | 阿里云用户名 |
+| `ALIYUN_REGISTRY_PASSWORD` | 阿里云密码 |
+| `ALIYUN_REGISTRY` | 阿里云仓库地址 |
+
+### 3. 添加镜像
+
+编辑 `images.txt` 文件，添加需要同步的镜像：
+
+```bash
+# 基本格式
+nginx
+nginx:1.21
+# 指定架构
+nginx --platform=linux/arm64
+# 不同仓库
+k8s.gcr.io/kube-state-metrics/kube-state-metrics:v1.9.0
+ghcr.io/user/repo:tag
+```
+
 ![](doc/images.png)
-文件提交后，自动进入Github Action构建
 
-### 使用镜像
-回到阿里云，镜像仓库，点击任意镜像，可查看镜像状态。(可以改成公开，拉取镜像免登录)
-![](doc/开始使用.png)
+### 4. 启动同步
 
-在国内服务器pull镜像, 例如：<br>
+提交 `images.txt` 文件，GitHub Action 将自动开始同步。
+
+## ⚙️ 详细配置
+
+### 阿里云容器镜像服务配置
+
+1. **创建命名空间**
+
+   ![](doc/命名空间.png)
+
+2. **获取访问凭证**
+
+   ![](doc/用户名密码.png)
+
+### GitHub Action 配置
+
+1. **启用 Action 功能**
+
+   进入项目页面，点击 Action 标签，启用 GitHub Action 功能
+
+2. **配置环境变量**
+
+   ![](doc/配置环境变量.png)
+
+## 📝 使用说明
+
+### images.txt 文件格式
+
+```bash
+# 注释行以 # 开头
+nginx                                    # 默认使用 latest 标签
+nginx:1.21-alpine                        # 指定标签
+nginx --platform=linux/arm64             # 指定架构
+k8s.gcr.io/kube-state-metrics/kube-state-metrics:v2.0.0  # k8s 镜像
+ghcr.io/actions/runner:latest             # GitHub Container Registry
 ```
-docker pull registry.cn-hangzhou.aliyuncs.com/shrimp-images/alpine
-```
-registry.cn-hangzhou.aliyuncs.com 即 ALIYUN_REGISTRY(阿里云仓库地址)<br>
-shrimp-images 即 ALIYUN_NAME_SPACE(阿里云命名空间)<br>
-alpine 即 阿里云中显示的镜像名<br>
 
-### 多架构
-需要在images.txt中用 --platform=xxxxx手动指定镜像架构
-指定后的架构会以前缀的形式放在镜像名字前面
+### 拉取镜像
+
+同步完成后，在国内服务器上拉取镜像：
+
+```bash
+docker pull registry.cn-hangzhou.aliyuncs.com/你的命名空间/镜像名:标签
+```
+
+示例：
+```bash
+docker pull registry.cn-hangzhou.aliyuncs.com/my-namespace/nginx:latest
+```
+
+### 多架构支持
+
+在 `images.txt` 中使用 `--platform` 参数指定镜像架构：
+
+```bash
+# 单架构示例
+--platform=linux/arm64 nginx
+
+# 多架构示例（同一镜像的不同架构）
+--platform=linux/amd64 ubuntu
+--platform=linux/arm64 ubuntu
+
+# 其他常用架构
+--platform=linux/arm64/v8 node
+--platform=linux/386 alpine
+```
+
+指定架构后，架构名称会以前缀形式添加到镜像名前面：
+
+```
+registry.cn-hangzhou.aliyuncs.com/namespace/linux_arm64_nginx:latest
+```
+
 ![](doc/多架构.png)
 
-### 镜像重名
-程序自动判断是否存在名称相同, 但是属于不同命名空间的情况。
-如果存在，会把命名空间作为前缀加在镜像名称前。
-例如:
+### 镜像重名处理
+
+程序会自动检测重名镜像并智能处理：
+
+```bash
+# 如果有重名镜像，会自动添加命名空间前缀
+xhofe/alist           # 同步为 xhofe_alist
+xiaoyaliu/alist       # 同步为 xiaoyaliu_alist
 ```
-xhofe/alist
-xiaoyaliu/alist
-```
+
 ![](doc/镜像重名.png)
 
-### 定时执行
-修改/.github/workflows/docker.yaml文件
-添加 schedule即可定时执行(此处cron使用UTC时区)
+### 定时同步
+
+修改 `.github/workflows/docker.yaml` 文件，添加 `schedule` 触发器：
+
+```yaml
+on:
+  push:
+    branches: [ main ]
+  schedule:
+    # 每天北京时间上午9点执行（UTC时区）
+    - cron: '0 1 * * *'
+  workflow_dispatch:
+```
+
 ![](doc/定时执行.png)
+
+### 镜像状态查看
+
+回到阿里云镜像仓库，可以查看镜像同步状态。可以将镜像设为公开，实现免登录拉取。
+
+![](doc/开始使用.png)
+
+## ❓ 常见问题
+
+### Q: 同步失败了怎么办？
+A: 检查以下几点：
+1. 确认阿里云配置信息正确（特别是 `ALIYUN_NAME_SPACE` 不能为空）
+2. 检查源镜像是否存在
+3. 确认镜像大小不超过40GB限制
+4. 查看 GitHub Action 日志获取详细错误信息
+
+常见错误：
+- `invalid reference format`: 通常是 `ALIYUN_NAME_SPACE` 配置为空导致的
+- `denied: requested access to the resource is denied`: 用户名或密码错误
+- `Error processing tar file`: 镜像损坏或网络问题
+
+### Q: 如何同步私有镜像？
+A: 目前不支持私有镜像同步，仅支持公共镜像仓库。
+
+### Q: 同步速度很慢怎么办？
+A: 同步速度取决于多个因素：
+- 源镜像服务器位置
+- 镜像大小
+- 网络状况
+
+建议在网络较好的时间段同步。
+
+### Q: 可以同时同步多个镜像吗？
+A: 可以，在 `images.txt` 中每行一个镜像即可，会并行处理。
+
+### Q: 如何删除已同步的镜像？
+A: 登录阿里云容器镜像服务，手动删除不需要的镜像。
+
+## 🤝 贡献指南
+
+欢迎提交 Issue 和 Pull Request！
+
+### 提交 Issue
+- 使用清晰描述标题
+- 提供详细的错误信息和复现步骤
+- 附上相关日志信息
+
+### 提交 Pull Request
+- Fork 本项目
+- 创建特性分支 (`git checkout -b feature/AmazingFeature`)
+- 提交更改 (`git commit -m 'Add some AmazingFeature'`)
+- 推送到分支 (`git push origin feature/AmazingFeature`)
+- 创建 Pull Request
+
+## 📄 许可证
+
+本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
+
+## 🙏 致谢
+
+**原作作者：[技术爬爬虾](https://github.com/tech-shrimp/me)**
+
+B站、抖音、YouTube 全网同名，转载请注明原作者
+
+- 📺 [B站视频教程](https://www.bilibili.com/video/BV1Zn4y19743/)
+- 🐛 [原作者 GitHub](https://github.com/tech-shrimp/me)
+- 🌟 [给原作者项目点 Star](https://github.com/tech-shrimp/docker-image-pusher)
+
+### 支持作者
+
+如果这个项目对你有帮助，请给个 ⭐ Star 支持一下！
+
+## 📞 联系方式
+
+- GitHub Issues: [提交问题](https://github.com/gqy20/docker_image_pusher/issues)
+- 原作者 B站: [@技术爬爬虾](https://www.bilibili.com/video/BV1Zn4y19743/)
+
+---
+
+**⚠️ 重要声明**：本项目基于 [技术爬爬虾](https://github.com/tech-shrimp/me) 的原作进行 Fork 和优化，版权归原作者所有。
