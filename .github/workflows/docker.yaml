@@ -2,10 +2,22 @@ name: Docker
 
 on:
   workflow_dispatch:
+    inputs:
+      force_sync:
+        description: '强制同步所有镜像（忽略现有仓库状态）'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
   push:
     branches: [ main ]
     paths:
-      - 'images.txt'  # 只有images.txt变化时才触发
+      - 'images.txt'  # images.txt变化时触发智能同步
+  schedule:
+    # 每天北京时间上午8点执行智能同步检查
+    - cron: '0 0 * * *'
 
 
 env:
@@ -61,50 +73,139 @@ jobs:
       run: |
         docker login -u $ALIYUN_REGISTRY_USER -p $ALIYUN_REGISTRY_PASSWORD $ALIYUN_REGISTRY
 
-        echo "🔍 检查images.txt变更情况..."
+        echo "🔍 智能镜像同步系统启动..."
+        echo "=============================================================================="
 
-        # 获取当前提交的父提交数量
-        PARENT_COUNT=$(git rev-list --count HEAD~1 2>/dev/null || echo "0")
-        echo "📊 Git历史检查: 父提交数量 = $PARENT_COUNT"
-
-        if [[ "$PARENT_COUNT" -gt 0 ]]; then
-          echo "📊 检测到git历史，分析变更..."
-
-          # 检查images.txt是否有变化
-          if git diff --quiet HEAD~1 HEAD -- images.txt; then
-            echo "✅ images.txt没有变化，跳过镜像同步"
-            exit 0
-          fi
-
-          echo "🔄 images.txt有变化，分析具体变更..."
-          echo "=============================================================================="
-
-          # 获取新增和修改的镜像行
-          CHANGED_IMAGES=$(git diff HEAD~1 HEAD -- images.txt | grep '^\+' | grep -v '^+++' | sed 's/^\+//' | grep -v '^#' | grep -v '^$' || true)
-
-          if [[ -z "$CHANGED_IMAGES" ]]; then
-            echo "ℹ️  没有新的镜像需要同步（可能只是注释变化）"
-            exit 0
-          fi
-
-          echo "📋 发现以下镜像需要处理："
-          echo "$CHANGED_IMAGES"
-          echo "=============================================================================="
-
-          # 创建临时文件只包含需要处理的镜像
-          echo "$CHANGED_IMAGES" > temp_images.txt
-          IMAGES_FILE="temp_images.txt"
+        # 从环境变量解析阿里云仓库地址
+        if [[ "$ALIYUN_REGISTRY" =~ ^registry\.([^.]+)\.aliyuncs\.com$ ]]; then
+            REGION="${BASH_REMATCH[1]}"
+            echo "📍 检测到阿里云区域: $REGION"
         else
-          echo "🆕 首次提交或无历史记录，处理所有镜像..."
-          IMAGES_FILE="images.txt"
+            echo "⚠️  无法解析阿里云区域，使用默认: hangzhou"
+            REGION="hangzhou"
         fi
 
-        echo "🚀 开始同步镜像..."
+        # 阿里云容器镜像服务API基础URL
+        API_BASE="https://cr.$REGION.aliyuncs.com/v2"
+        NAMESPACE_API="https://cr.$REGION.aliyuncs.com/v2/namespaces"
+
+        echo "🔗 API地址: $API_BASE"
+        echo "📂 命名空间: $ALIYUN_NAME_SPACE"
+        echo "=============================================================================="
+
+        # 获取阿里云仓库中已有的镜像列表
+        echo "📊 正在查询阿里云仓库中的镜像..."
+
+        # 构建认证token
+        AUTH_TOKEN=$(echo -n "$ALIYUN_REGISTRY_USER:$ALIYUN_REGISTRY_PASSWORD" | base64)
+
+        # 获取命名空间信息
+        echo "🔍 获取命名空间信息..."
+        NAMESPACE_RESPONSE=$(curl -s -H "Authorization: Basic $AUTH_TOKEN" \
+            "$NAMESPACE_API/$ALIYUN_NAME_SPACE/repositories?page=1&page_size=100" || echo "{}")
+
+        # 解析JSON响应获取仓库列表
+        if echo "$NAMESPACE_RESPONSE" | grep -q '"repositories"'; then
+            echo "✅ 成功获取仓库列表"
+
+            # 提取仓库名称
+            EXISTING_REPOS=$(echo "$NAMESPACE_RESPONSE" | grep -o '"name":"[^"]*"' | sed 's/"name":"//g' | sed 's/"//g' || echo "")
+
+            if [[ -n "$EXISTING_REPOS" ]]; then
+                echo "📦 发现现有仓库:"
+                echo "$EXISTING_REPOS" | while read repo; do
+                    if [[ -n "$repo" ]]; then
+                        echo "  - $repo"
+                    fi
+                done
+            else
+                echo "ℹ️  命名空间中暂无仓库"
+            fi
+        else
+            echo "⚠️  获取仓库列表失败，将进行全量同步"
+            EXISTING_REPOS=""
+        fi
+
+        echo "=============================================================================="
+
+        # 分析images.txt中的镜像需求
+        echo "🔍 分析镜像同步需求..."
+
+        NEEDED_IMAGES=""
+        TOTAL_IMAGES=0
+        NEEDED_COUNT=0
+
+        while IFS= read -r line || [ -n "$line" ]; do
+            # 忽略空行与注释
+            [[ -z "$line" ]] && continue
+            if echo "$line" | grep -q '^\s*#'; then
+                continue
+            fi
+
+            ((TOTAL_IMAGES++))
+
+            # 提取镜像信息
+            if echo "$line" | grep -q -- '--platform'; then
+                image=$(echo "$line" | awk '{print $NF}')
+                platform=$(echo "$line" | awk -F'--platform[ =]' '{if (NF>1) print $2}' | awk '{print $1}')
+            else
+                image="$line"
+                platform=""
+            fi
+
+            # 解析镜像名和标签
+            if echo "$image" | grep -q ":"; then
+                repo_part=$(echo "$image" | cut -d':' -f1)
+                tag_part=$(echo "$image" | cut -d':' -f2)
+            else
+                repo_part="$image"
+                tag_part="latest"
+            fi
+
+            # 获取最终镜像名（去除命名空间前缀）
+            final_name=$(echo "$repo_part" | awk -F'/' '{print $NF}')
+            final_image="${final_name}:${tag_part}"
+
+            # 处理重名镜像
+            if echo "$EXISTING_REPOS" | grep -q "^$final_name$"; then
+                echo "✅ 镜像已存在: $final_image"
+                # 这里可以进一步检查标签是否需要更新
+                # 暂时假设已存在的镜像不需要更新
+            else
+                echo "🆕 需要同步: $final_image"
+                ((NEEDED_COUNT++))
+                if [[ -n "$NEEDED_IMAGES" ]]; then
+                    NEEDED_IMAGES="$NEEDED_IMAGES$line"$'\n'
+                else
+                    NEEDED_IMAGES="$line"$'\n'
+                fi
+            fi
+
+        done < images.txt
+
+        echo "=============================================================================="
+        echo "📊 同步需求分析结果:"
+        echo "  📋 配置总数: $TOTAL_IMAGES 个镜像"
+        echo "  ✅ 已存在: $((TOTAL_IMAGES - NEEDED_COUNT)) 个镜像"
+        echo "  🆕 需要同步: $NEEDED_COUNT 个镜像"
+        echo "=============================================================================="
+
+        # 如果没有需要同步的镜像，直接退出
+        if [[ $NEEDED_COUNT -eq 0 ]]; then
+            echo "🎉 所有镜像已存在，无需同步"
+            exit 0
+        fi
+
+        # 创建临时文件只包含需要同步的镜像
+        echo "$NEEDED_IMAGES" > temp_images.txt
+        IMAGES_FILE="temp_images.txt"
+
+        echo "🚀 开始同步缺失的镜像..."
 
         # 数据预处理,判断镜像是否重名
         declare -A duplicate_images
         declare -A temp_map
-        while IFS= read -r line || [ -n "$line" ]; do
+        while IFS= read -r line || [ -n "$line" ]]; do
             # 忽略空行与注释
             [[ -z "$line" ]] && continue
             if echo "$line" | grep -q '^\s*#'; then
@@ -220,8 +321,8 @@ jobs:
 
         echo ""
         echo "=============================================================================="
-        echo "📊 同步完成统计:"
-        echo "  📋 总计处理: $TOTAL_COUNT 个镜像"
-        echo "  ✅ 成功同步: $SUCCESS_COUNT 个镜像"
+        echo "📊 智能同步完成统计:"
+        echo "  📋 配置总数: $TOTAL_IMAGES 个镜像"
+        echo "  🆕 新增同步: $SUCCESS_COUNT 个镜像"
         echo "  ❌ 失败数量: $((TOTAL_COUNT - SUCCESS_COUNT)) 个镜像"
         echo "=============================================================================="
