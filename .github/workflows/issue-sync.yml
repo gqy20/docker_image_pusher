@@ -171,8 +171,7 @@ jobs:
             issue_number: context.issue.number,
             owner: context.repo.owner,
             repo: context.repo.repo,
-            body: `## ${statusEmoji} 同步完成\n\n**状态**: ${statusText}\n\n📊 **同步统计**:\n- 📋 处理总数: ${totalCount} 个镜像\n- ✅ 成功同步: ${successCount} 个镜像\n- ❌ 失败数量: ${failedCount} 个镜像\n\n---
-*由 GitHub Actions 自动处理 • ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}*`
+            body: `## ${statusEmoji} 同步完成\n\n**状态**: ${statusText}\n\n📊 **同步统计**:\n- 📋 处理总数: ${totalCount} 个镜像\n- ✅ 成功同步: ${successCount} 个镜像\n- ❌ 失败数量: ${failedCount} 个镜像\n\n---\n*由 GitHub Actions 自动处理 • ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}*`
           });
 
           // 如果全部成功，关闭 issue
