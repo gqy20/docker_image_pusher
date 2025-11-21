@@ -34,8 +34,8 @@ jobs:
         # 从 issue body 中提取镜像列表，格式与 images.txt 相同
         echo "Extracting images from issue..."
 
-        # 提取代码块中的内容，或者提取所有行
-        IMAGES=$(echo '${{ github.event.issue.body }}' | sed -n '/```/,/```/p' | sed '1d;$d' || echo '${{ github.event.issue.body }}')
+        # 提取代码块中的内容
+        IMAGES=$(echo '${{ github.event.issue.body }}' | sed -n '/```/,/```/p' | sed '1d;$d')
 
         # 过滤出有效的镜像行（排除空行和注释）
         echo "$IMAGES" | grep -v '^#' | grep -v '^$' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' > issue_images.txt
@@ -44,26 +44,20 @@ jobs:
         echo "Found images to sync:"
         cat issue_images.txt
 
-        # 设置输出变量
-        IMAGE_COUNT=$(cat issue_images.txt | grep -v '^$' | wc -l)
-        echo "image_count=$IMAGE_COUNT" >> $GITHUB_OUTPUT
+        # 设置输出变量 - 只计算非空行
+        VALID_IMAGES=$(cat issue_images.txt | grep -v '^$' | wc -l)
+        echo "image_count=$VALID_IMAGES" >> $GITHUB_OUTPUT
 
-        if [ $IMAGE_COUNT -eq 0 ]; then
+        if [ $VALID_IMAGES -eq 0 ]; then
           echo "No valid images found in issue"
           exit 1
         fi
 
-    - name: Add initial comment
-      uses: actions/github-script@v7
-      with:
-        script: |
-          github.rest.issues.createComment({
-            issue_number: context.issue.number,
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            body: `## 🚀 开始同步镜像\n\n检测到 **${{ steps.extract.outputs.image_count }}** 个镜像需要同步：\n\n正在准备同步环境，请稍候...`
-          });
+        # 统计实际需要处理的镜像数量，用于后续对比
+        TOTAL_LINES=$(cat issue_images.txt | wc -l)
+        echo "Found $TOTAL_COUNT total lines, $VALID_IMAGES valid images"
 
+  
     - name: Docker login and sync
       run: |
         set +e
