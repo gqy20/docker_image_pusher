@@ -56,9 +56,7 @@ jobs:
           exit 1
         fi
 
-        # 统计实际需要处理的镜像数量，用于后续对比
-        TOTAL_LINES=$(cat issue_images.txt | wc -l)
-        echo "Found $TOTAL_COUNT total lines, $VALID_IMAGES valid images"
+        echo "Found $VALID_IMAGES valid images to sync"
 
   
     - name: Docker login and sync
