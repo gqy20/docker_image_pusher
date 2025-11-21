@@ -34,8 +34,14 @@ jobs:
         # 从 issue body 中提取镜像列表，格式与 images.txt 相同
         echo "Extracting images from issue..."
 
+        # 使用更可靠的方法提取代码块中的内容
+        # 将issue body写入临时文件
+        cat << 'EOF' > issue_body.txt
+${{ github.event.issue.body }}
+EOF
+
         # 提取代码块中的内容
-        IMAGES=$(echo '${{ github.event.issue.body }}' | sed -n '/```/,/```/p' | sed '1d;$d')
+        IMAGES=$(sed -n '/```/,/```/p' issue_body.txt | sed '1d;$d')
 
         # 过滤出有效的镜像行（排除空行和注释）
         echo "$IMAGES" | grep -v '^#' | grep -v '^$' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' > issue_images.txt
@@ -54,15 +60,19 @@ jobs:
         echo "File content check:"
         echo "File exists: $(test -f issue_images.txt && echo 'YES' || echo 'NO')"
         echo "File size: $(test -f issue_images.txt && wc -l < issue_images.txt || echo '0')"
-        echo "File content:"
+        echo "File content (hex):"
         test -f issue_images.txt && hexdump -C issue_images.txt | head -5 || echo "No file"
+        echo "Original issue body (first 200 chars):"
+        head -c 200 issue_body.txt
+        echo ""
+        echo "---"
 
         echo "image_count=$VALID_IMAGES" >> $GITHUB_OUTPUT
 
         if [ $VALID_IMAGES -eq 0 ]; then
           echo "No valid images found in issue"
-          echo "Issue body preview:"
-          echo '${{ github.event.issue.body }}' | head -10
+          echo "Full issue body:"
+          cat issue_body.txt
           exit 1
         fi
 
