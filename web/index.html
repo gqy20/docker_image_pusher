@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🐳 Docker镜像同步工具</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- 头部导航区域 -->
+    <header class="header">
+        <h1>🐳 Docker镜像同步工具</h1>
+        <div class="header-actions">
+            <button id="settingsBtn" class="btn btn-secondary">⚙️ 设置</button>
+        </div>
+    </header>
+
+    <!-- 主要内容区域 -->
+    <main class="container">
+        <!-- 配置状态卡片 -->
+        <section class="config-status">
+            <div class="status-card">
+                <h3>📊 仓库状态</h3>
+                <div id="repoStatus">
+                    <div class="status-indicator status-unknown">
+                        <span class="status-icon">❓</span>
+                        <span class="status-text">未配置</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 镜像输入区域 -->
+        <section class="input-section">
+            <h2>📦 镜像同步</h2>
+            <div class="input-group">
+                <label for="imageInput">输入镜像列表（每行一个）：</label>
+                <textarea id="imageInput" placeholder="nginx:latest
+redis:7.0
+ubuntu:22.04
+--platform=linux/arm64 node:18
+k8s.gcr.io/pause:3.9"></textarea>
+                <div class="input-hint">
+                    支持格式：镜像名:标签，支持 --platform=架构 参数
+                </div>
+            </div>
+
+            <!-- 选项设置 -->
+            <div class="options">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="forceUpdate">
+                    <span class="checkmark"></span>
+                    强制更新已存在镜像
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" id="dryRun">
+                    <span class="checkmark"></span>
+                    仅检测模式（不实际同步）
+                </label>
+            </div>
+
+            <!-- 操作按钮 -->
+            <div class="actions">
+                <button id="validateBtn" class="btn btn-secondary" disabled>
+                    🔍 验证镜像
+                </button>
+                <button id="syncBtn" class="btn btn-primary" disabled>
+                    🚀 开始同步
+                </button>
+            </div>
+        </section>
+
+        <!-- 状态显示区域 -->
+        <section class="status-section">
+            <h2>📈 同步状态</h2>
+            <div id="syncStatus" class="status-container">
+                <div class="placeholder">
+                    <div class="placeholder-icon">⏳</div>
+                    <div class="placeholder-text">暂无同步任务</div>
+                    <div class="placeholder-hint">配置认证信息后即可开始同步</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 历史记录区域 -->
+        <section class="history-section">
+            <h2>📜 同步历史</h2>
+            <div id="syncHistory" class="history-container">
+                <div class="placeholder">
+                    <div class="placeholder-icon">📋</div>
+                    <div class="placeholder-text">暂无历史记录</div>
+                    <div class="placeholder-hint">完成同步后将显示历史记录</div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 设置模态对话框 -->
+    <div id="settingsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>⚙️ 设置</h3>
+                <span class="close" data-modal="settingsModal">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="repoOwner">GitHub 仓库所有者：</label>
+                    <input type="text" id="repoOwner" placeholder="用户名或组织名">
+                    <div class="form-hint">例如：username 或 organization</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="githubToken">GitHub Personal Access Token：</label>
+                    <input type="password" id="githubToken" placeholder="ghp_xxxxxxxxxxxx">
+                    <div class="form-hint">
+                        需要repo权限，仅存储在浏览器本地<br>
+                        <a href="https://github.com/settings/tokens/new" target="_blank">创建Token</a>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="refreshInterval">状态刷新间隔（秒）：</label>
+                    <input type="number" id="refreshInterval" min="3" max="60" value="5">
+                    <div class="form-hint">设置多久刷新一次同步状态</div>
+                </div>
+
+                <div class="modal-actions">
+                    <button id="testConnectionBtn" class="btn btn-secondary">🔗 测试连接</button>
+                    <button id="saveSettingsBtn" class="btn btn-primary">💾 保存设置</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 验证结果模态对话框 -->
+    <div id="validationModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>🔍 镜像验证结果</h3>
+                <span class="close" data-modal="validationModal">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div id="validationResults"></div>
+                <div class="modal-actions">
+                    <button id="closeValidationBtn" class="btn btn-primary">关闭</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 工作流详情模态对话框 -->
+    <div id="workflowModal" class="modal">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3>🔄 工作流详情</h3>
+                <span class="close" data-modal="workflowModal">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div id="workflowDetails"></div>
+                <div class="modal-actions">
+                    <button id="viewLogsBtn" class="btn btn-secondary">📄 查看日志</button>
+                    <button id="closeWorkflowBtn" class="btn btn-primary">关闭</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 通知容器 -->
+    <div id="notificationContainer" class="notification-container"></div>
+
+    <!-- 加载JavaScript -->
+    <script src="app.js"></script>
+</body>
+</html>

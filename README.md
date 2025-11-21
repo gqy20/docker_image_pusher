@@ -17,13 +17,75 @@
 - 🔄 **自动化同步** - 支持定时自动同步更新
 - 📝 **智能重名处理** - 自动处理镜像重名情况
 - 🎯 **零成本使用** - 完全免费，无需服务器
+- 🌐 **Web管理界面** - 提供直观的Web界面进行镜像管理和状态监控
+- 🎛️ **可视化操作** - 通过浏览器轻松触发工作流、查看镜像状态
+- 📊 **实时监控** - 实时显示同步进度和执行状态
 
 ## 📺 视频教程
 
 [B站视频教程](https://www.bilibili.com/video/BV1Zn4y19743/)
 
+## 🌐 Web管理界面
+
+项目现在提供了直观的Web管理界面，让您能够通过浏览器轻松管理Docker镜像同步：
+
+### 🔗 访问地址
+- **GitHub Pages**: `https://[你的用户名].github.io/docker_image_pusher/`
+- *注：部署后需要等待几分钟才能访问*
+
+### ✨ Web界面功能
+
+- 🎛️ **可视化镜像管理** - 通过表单输入镜像列表，支持格式验证
+- 🚀 **一键同步** - 点击按钮触发GitHub Actions工作流
+- 📊 **实时状态监控** - 实时显示同步进度和执行状态
+- 📜 **历史记录** - 查看所有同步任务的历史记录和详细信息
+- ⚙️ **设置管理** - 配置GitHub认证信息和刷新间隔
+- 🔍 **镜像验证** - 验证镜像格式并显示警告信息
+- 📱 **响应式设计** - 完美适配桌面和移动设备
+
+### 🛠️ 使用步骤
+
+1. **访问Web界面** - 打开GitHub Pages链接
+2. **配置认证** - 点击设置按钮，输入GitHub仓库所有者和Personal Access Token
+3. **测试连接** - 验证GitHub API连接是否正常
+4. **输入镜像** - 在文本框中输入要同步的镜像列表（每行一个）
+5. **选择选项** - 可选择强制更新或仅检测模式
+6. **开始同步** - 点击"开始同步"按钮触发工作流
+7. **监控进度** - 实时查看同步状态和执行结果
+
+### 🔑 GitHub Token配置
+
+1. 访问 [GitHub Token设置](https://github.com/settings/tokens/new)
+2. 创建新的Personal Access Token，需要以下权限：
+   - `repo` - 访问仓库
+   - `workflow` - 触发工作流
+3. 复制生成的Token（仅显示一次）
+4. 在Web界面设置中填入Token
+
+### 📋 支持的镜像格式
+
+```bash
+# 基本格式
+nginx
+nginx:1.21-alpine
+
+# 指定架构
+nginx --platform=linux/arm64
+
+# 不同仓库
+k8s.gcr.io/kube-state-metrics/kube-state-metrics:v1.9.0
+ghcr.io/actions/runner:latest
+
+# 批量格式
+nginx:latest
+redis:7.0
+ubuntu:22.04
+--platform=linux/arm64 node:18
+```
+
 ## 📖 目录
 
+- [Web管理界面](#-web管理界面)
 - [快速开始](#-快速开始)
 - [详细配置](#-详细配置)
 - [使用说明](#-使用说明)
