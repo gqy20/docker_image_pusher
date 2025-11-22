@@ -238,8 +238,11 @@ smart_sync_images() {
 
         echo "🔍 检测镜像: $final_image (原始: $line)"
 
-        # 使用docker manifest检查镜像是否存在
-        if docker manifest inspect "$final_image" >/dev/null 2>&1; then
+        # 使用docker manifest检查镜像是否存在（避免因失败导致脚本退出）
+        local manifest_result=0
+        docker manifest inspect "$final_image" >/dev/null 2>&1 || manifest_result=$?
+
+        if [ $manifest_result -eq 0 ]; then
             echo "✅ 镜像已存在，跳过: $final_image"
             if [[ -n "$EXISTING_IMAGES" ]]; then
                 EXISTING_IMAGES="$EXISTING_IMAGES$image_name"$'\n'
