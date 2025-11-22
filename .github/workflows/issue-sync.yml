@@ -35,7 +35,11 @@ jobs:
       id: extract
       run: |
         # 使用镜像处理脚本提取镜像
-        ./scripts/image-processor.sh -i "${{ github.event.issue.body }}" -o extract-result.env -r extract
+        # 使用heredoc避免shell语法错误
+        ./scripts/image-processor.sh -i "$(cat << 'EOF'
+        ${{ github.event.issue.body }}
+        EOF
+        )" -o extract-result.env -r extract
 
     - name: Docker login and sync
       run: |
