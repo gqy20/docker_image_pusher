@@ -7,6 +7,7 @@ SOURCE_FILE=""
 ISSUE_BODY=""
 OUTPUT_ENV_FILE=""
 REPORT_MODE="sync"
+SMART_SYNC="false"
 
 # 帮助信息
 show_help() {
@@ -20,6 +21,7 @@ show_help() {
     -i, --issue-body TEXT    从GitHub Issue body提取镜像
     -o, --output FILE        输出环境变量到文件 (用于GitHub Actions)
     -r, --report MODE        报告模式: sync (默认) | extract
+    -s, --smart-sync         启用智能同步模式，跳过已存在的镜像
     -h, --help               显示帮助信息
 
 示例:
@@ -28,6 +30,9 @@ show_help() {
 
     # 从Issue body提取镜像
     $0 -i "\`\`\`\nnginx:latest\nalpine:latest\n\`\`\`" -o extract-result.env -r extract
+
+    # 智能同步模式（跳过已存在的镜像）
+    $0 -f images.txt -o sync-result.env -s
 
 EOF
 }
@@ -50,6 +55,10 @@ while [[ $# -gt 0 ]]; do
         -r|--report)
             REPORT_MODE="$2"
             shift 2
+            ;;
+        -s|--smart-sync)
+            SMART_SYNC="true"
+            shift
             ;;
         -h|--help)
             show_help
@@ -116,6 +125,202 @@ BODY_EOF
     rm -f "$temp_file"
 
     echo "$valid_count"
+}
+
+# 智能镜像同步函数（预检查+同步）
+smart_sync_images() {
+    local input_file="$1"
+
+    if [ ! -f "$input_file" ]; then
+        echo "❌ 镜像列表文件不存在: $input_file"
+        return 1
+    fi
+
+    echo "🔍 智能镜像同步模式启动..."
+    echo "=============================================================================="
+
+    # 首先进行重名分析（与docker.yaml逻辑一致）
+    echo "🔍 预处理重名镜像分析..."
+    declare -A duplicate_images
+    declare -A temp_map
+
+    while IFS= read -r line || [ -n "$line" ]; do
+        # 使用统一的过滤逻辑
+        [[ -z "$line" ]] && continue
+        if echo "$line" | grep -q '^\s*#'; then
+            continue
+        fi
+
+        # 提取镜像信息
+        local platform=""
+        local image="$line"
+        if echo "$line" | grep -q -- '--platform'; then
+            platform=$(echo "$line" | awk -F'--platform[ =]' '{if (NF>1) print $2}' | awk '{print $1}')
+            image=$(echo "$line" | awk '{print $NF}')
+        fi
+
+        # 将@sha256:等字符删除
+        image="${image%%@*}"
+
+        # 获取镜像名:版本号
+        local image_name_tag=$(echo "$image" | awk -F'/' '{print $NF}')
+        local image_name=$(echo "$image_name_tag" | awk -F':' '{print $1}')
+
+        # 获取命名空间
+        local name_space=$(echo "$image" | awk -F'/' '{if (NF==3) print $2; else if (NF==2) print $1; else print ""}')
+
+        # 检测重名镜像
+        if [[ -n "${temp_map[$image_name]}" ]]; then
+             if [[ "${temp_map[$image_name]}" != "$name_space" ]]; then
+                echo "🔄 发现重名镜像: $image_name"
+                duplicate_images[$image_name]="true"
+             fi
+        else
+            temp_map[$image_name]="$name_space"
+        fi
+    done < "$input_file"
+
+    # 检测现有镜像并生成需要同步的列表
+    echo "📊 检测现有镜像..."
+    local total_images=0
+    local needed_images=0
+    EXISTING_IMAGES=""
+
+    # 创建临时文件存储需要同步的镜像
+    local temp_sync_file="needed_images.txt"
+    > "$temp_sync_file"
+
+    while IFS= read -r line || [ -n "$line" ]; do
+        # 使用统一的过滤逻辑
+        [[ -z "$line" ]] && continue
+        if echo "$line" | grep -q '^\s*#'; then
+            continue
+        fi
+
+        ((total_images++))
+
+        # 提取镜像信息
+        local platform=""
+        local image="$line"
+        if echo "$line" | grep -q -- '--platform'; then
+            platform=$(echo "$line" | awk -F'--platform[ =]' '{if (NF>1) print $2}' | awk '{print $1}')
+            image=$(echo "$line" | awk '{print $NF}')
+        fi
+
+        # 将@sha256:等字符删除
+        image="${image%%@*}"
+
+        # 获取镜像名:版本号
+        local image_name_tag=$(echo "$image" | awk -F'/' '{print $NF}')
+        local image_name=$(echo "$image_name_tag" | awk -F':' '{print $1}')
+
+        # 获取命名空间
+        local name_space=$(echo "$image" | awk -F'/' '{if (NF==3) print $2; else if (NF==2) print $1; else print ""}')
+
+        # 生成平台前缀
+        local platform_prefix=""
+        if [ -n "$platform" ]; then
+            platform_prefix="${platform//\//_}_"
+        fi
+
+        # 处理重名镜像
+        local name_space_prefix=""
+        if [[ -n "${duplicate_images[$image_name]}" ]]; then
+           if [[ -n "$name_space" ]]; then
+              name_space_prefix="${name_space}_"
+           fi
+        fi
+
+        # 生成最终镜像名（与同步阶段完全一致）
+        image_name_tag="${image_name_tag%%@*}"
+        local final_image="$ALIYUN_REGISTRY/$ALIYUN_NAME_SPACE/${platform_prefix}${name_space_prefix}${image_name_tag}"
+
+        echo "🔍 检测镜像: $final_image (原始: $line)"
+
+        # 使用docker manifest检查镜像是否存在
+        if docker manifest inspect "$final_image" >/dev/null 2>&1; then
+            echo "✅ 镜像已存在，跳过: $final_image"
+            if [[ -n "$EXISTING_IMAGES" ]]; then
+                EXISTING_IMAGES="$EXISTING_IMAGES$image_name"$'\n'
+            else
+                EXISTING_IMAGES="$image_name"$'\n'
+            fi
+        else
+            echo "❌ 镜像不存在，需要同步: $final_image"
+            ((needed_images++))
+            echo "$line" >> "$temp_sync_file"
+        fi
+
+    done < "$input_file"
+
+    echo "=============================================================================="
+    echo "📊 智能同步分析结果:"
+    echo "  📋 总镜像数: $total_images 个镜像"
+    echo "  ✅ 已存在: $((total_images - needed_images)) 个镜像"
+    echo "  🆕 需要同步: $needed_images 个镜像"
+    echo "=============================================================================="
+
+    # 如果没有需要同步的镜像，直接退出
+    if [ $needed_images -eq 0 ]; then
+        echo "🎉 所有镜像已存在，无需同步"
+
+        # 设置输出环境变量
+        if [ -n "$OUTPUT_ENV_FILE" ]; then
+            echo "TOTAL_COUNT=$total_images" >> "$OUTPUT_ENV_FILE"
+            echo "SUCCESS_COUNT=$total_images" >> "$OUTPUT_ENV_FILE"
+            echo "SKIPPED_COUNT=0" >> "$OUTPUT_ENV_FILE"
+
+            echo "SUCCESS_IMAGES<<EOF" >> "$OUTPUT_ENV_FILE"
+            echo "所有镜像已存在，无需同步" >> "$OUTPUT_ENV_FILE"
+            echo "EOF" >> "$OUTPUT_ENV_FILE"
+
+            echo "FAILED_IMAGES<<EOF" >> "$OUTPUT_ENV_FILE"
+            echo "" >> "$OUTPUT_ENV_FILE"
+            echo "EOF" >> "$OUTPUT_ENV_FILE"
+        fi
+
+        rm -f "$temp_sync_file"
+        return 0
+    fi
+
+    echo "🚀 开始同步 $needed_images 个缺失的镜像..."
+
+    # 调用原来的同步函数处理需要同步的镜像
+    sync_images "$temp_sync_file"
+
+    # 获取同步结果
+    local sync_total_count=0
+    local sync_success_count=0
+    if [ -f sync-result.env ]; then
+        source sync-result.env
+        sync_total_count=$TOTAL_COUNT
+        sync_success_count=$SUCCESS_COUNT
+    fi
+
+    # 更新输出环境变量
+    if [ -n "$OUTPUT_ENV_FILE" ]; then
+        echo "TOTAL_COUNT=$total_images" >> "$OUTPUT_ENV_FILE"
+        echo "SUCCESS_COUNT=$sync_success_count" >> "$OUTPUT_ENV_FILE"
+        echo "SKIPPED_COUNT=$((total_images - needed_images))" >> "$OUTPUT_ENV_FILE"
+
+        # 合并成功和失败镜像列表
+        echo "SUCCESS_IMAGES<<EOF" >> "$OUTPUT_ENV_FILE"
+        if [ -f success_images.txt ]; then
+            cat success_images.txt >> "$OUTPUT_ENV_FILE"
+        fi
+        echo "" >> "$OUTPUT_ENV_FILE"
+        echo "EOF" >> "$OUTPUT_ENV_FILE"
+
+        echo "FAILED_IMAGES<<EOF" >> "$OUTPUT_ENV_FILE"
+        if [ -f failed_images.txt ]; then
+            cat failed_images.txt >> "$OUTPUT_ENV_FILE"
+        fi
+        echo "" >> "$OUTPUT_ENV_FILE"
+        echo "EOF" >> "$OUTPUT_ENV_FILE"
+    fi
+
+    # 清理临时文件
+    rm -f "$temp_sync_file" sync-result.env success_images.txt failed_images.txt
 }
 
 # 核心镜像同步函数
@@ -241,7 +446,13 @@ main() {
         exit 0
     elif [ -n "$SOURCE_FILE" ]; then
         # 文件模式
-        sync_images "$SOURCE_FILE"
+        if [ "$SMART_SYNC" = "true" ]; then
+            # 智能同步模式
+            smart_sync_images "$SOURCE_FILE"
+        else
+            # 普通同步模式
+            sync_images "$SOURCE_FILE"
+        fi
     else
         echo "❌ 请指定输入源 (-f 或 -i)"
         show_help

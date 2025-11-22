@@ -62,8 +62,8 @@ jobs:
 
         echo "Found ${image_count:-0} valid images to sync"
 
-        # 使用镜像处理脚本进行同步
-        ./scripts/image-processor.sh -f extracted_images.txt -o sync-result.env
+        # 使用镜像处理脚本进行智能同步（跳过已存在的镜像）
+        ./scripts/image-processor.sh -f extracted_images.txt -o sync-result.env -s
 
         # 读取结果并设置环境变量
         if [ -f sync-result.env ]; then
@@ -93,7 +93,8 @@ jobs:
         script: |
           const totalCount = process.env.TOTAL_COUNT || 0;
           const successCount = process.env.SUCCESS_COUNT || 0;
-          const failedCount = totalCount - successCount;
+          const skippedCount = parseInt(process.env.SKIPPED_COUNT || 0);
+          const failedCount = totalCount - successCount - skippedCount;
 
           // 获取成功和失败的镜像列表
           const successImages = process.env.SUCCESS_IMAGES || '';
@@ -103,13 +104,16 @@ jobs:
           let statusText = '全部成功';
 
           if (failedCount > 0) {
-            if (successCount === 0) {
+            if (successCount === 0 && skippedCount === 0) {
               statusEmoji = '❌';
               statusText = '全部失败';
             } else {
               statusEmoji = '⚠️';
               statusText = '部分成功';
             }
+          } else if (skippedCount > 0 && successCount === 0) {
+            statusEmoji = '⏭️';
+            statusText = '全部已存在';
           }
 
           const timestamp = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
@@ -127,7 +131,9 @@ jobs:
             detailedReport += '```\n' + failedImages.trim() + '\n```\n';
           }
 
-          const commentBody = `## ${statusEmoji} 同步完成\n\n**状态**: ${statusText}\n\n📊 **同步统计**:\n- 📋 处理总数: ${totalCount} 个镜像\n- ✅ 成功同步: ${successCount} 个镜像\n- ❌ 失败数量: ${failedCount} 个镜像${detailedReport}\n---\n*由 GitHub Actions 自动处理 • ${timestamp}*`;
+          let statistics = `- 📋 处理总数: ${totalCount} 个镜像\n- ✅ 成功同步: ${successCount} 个镜像\n- ⏭️ 跳过已存在: ${skippedCount} 个镜像\n- ❌ 失败数量: ${failedCount} 个镜像`;
+
+          const commentBody = `## ${statusEmoji} 智能同步完成\n\n**状态**: ${statusText}\n\n📊 **同步统计**:\n${statistics}${detailedReport}\n---\n*由 GitHub Actions 智能处理 • ${timestamp}*`;
 
           github.rest.issues.createComment({
             issue_number: context.issue.number,
@@ -136,7 +142,7 @@ jobs:
             body: commentBody
           });
 
-          // 如果全部成功，关闭 issue
+          // 如果全部成功或全部已存在，关闭 issue
           if (failedCount === 0 && parseInt(totalCount) > 0) {
             github.rest.issues.update({
               issue_number: context.issue.number,
