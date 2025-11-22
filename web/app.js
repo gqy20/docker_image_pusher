@@ -110,7 +110,7 @@ const Utils = {
     }
 };
 
-// GitHub API集成类
+// GitHub API集成类 - 简化版，无需Token
 class GitHubAPI {
     constructor() {
         this.baseURL = 'https://api.github.com';
@@ -125,32 +125,20 @@ class GitHubAPI {
             this.repoOwner = Utils.storage.get('repo_owner', '');
         }
 
-        // 尝试从localStorage读取token
-        this.token = Utils.storage.get('github_token', '');
         this.refreshInterval = Utils.storage.get('refresh_interval', 5) * 1000;
 
         console.log('检测到仓库所有者:', this.repoOwner);
     }
 
-    // 设置认证信息
-    setAuth(owner, token, refreshInterval = 5) {
-        this.repoOwner = owner;
-        this.token = token;
+    // 设置认证信息 - 极简版（仅设置刷新间隔）
+    setAuth(refreshInterval = 5) {
         this.refreshInterval = refreshInterval * 1000;
-
-        Utils.storage.set('repo_owner', owner);
-        Utils.storage.set('github_token', token);
         Utils.storage.set('refresh_interval', refreshInterval);
     }
 
     // 检查认证是否有效
     isAuthValid() {
         return !!(this.repoOwner);
-    }
-
-    // 检查是否可以执行写操作（需要token）
-    canWrite() {
-        return !!(this.repoOwner && this.token);
     }
 
     // 创建Issue触发同步（不需要token）
@@ -187,7 +175,7 @@ ${imageList}
         return !!this.repoOwner;
     }
 
-    // 通用请求方法
+    // 通用请求方法 - 简化版，仅使用公开API
     async request(endpoint, options = {}) {
         const url = `${this.baseURL}${endpoint}`;
         const headers = {
@@ -195,17 +183,8 @@ ${imageList}
             ...options.headers
         };
 
-        // 只有有token时才添加Authorization头
-        if (this.token) {
-            headers['Authorization'] = `token ${this.token}`;
-        }
-
         try {
             const response = await fetch(url, { ...options, headers });
-
-            if (response.status === 401) {
-                throw new Error('GitHub Token无效或已过期');
-            }
 
             if (response.status === 403) {
                 throw new Error('API请求频率限制，请稍后重试');
@@ -261,44 +240,7 @@ ${imageList}
         }
     }
 
-    // 触发手动同步工作流
-    async triggerManualSync(imageList, forceUpdate = false, dryRun = false) {
-        const inputs = {
-            image_list: imageList,
-            force_update: forceUpdate.toString(),
-            dry_run: dryRun.toString()
-        };
-
-        return this.request(
-            `/repos/${this.repoOwner}/${this.repoName}/actions/workflows/manual-sync.yml/dispatches`,
-            {
-                method: 'POST',
-                body: JSON.stringify({
-                    ref: 'main',
-                    inputs: inputs
-                })
-            }
-        );
-    }
-
-    // 触发主工作流
-    async triggerMainWorkflow(forceSync = false) {
-        const inputs = {
-            force_sync: forceSync.toString()
-        };
-
-        return this.request(
-            `/repos/${this.repoOwner}/${this.repoName}/actions/workflows/docker.yaml/dispatches`,
-            {
-                method: 'POST',
-                body: JSON.stringify({
-                    ref: 'main',
-                    inputs: inputs
-                })
-            }
-        );
-    }
-
+  
     // 获取工作流运行列表
     async getWorkflowRuns(workflowId = 'manual-sync.yml', perPage = 20) {
         return this.request(
@@ -318,30 +260,6 @@ ${imageList}
         return this.request(
             `/repos/${this.repoOwner}/${this.repoName}/actions/runs/${runId}`
         );
-    }
-
-    // 获取工作流运行日志
-    async getWorkflowLogs(runId) {
-        try {
-            const response = await fetch(
-                `${this.baseURL}/repos/${this.repoOwner}/${this.repoName}/actions/runs/${runId}/logs`,
-                {
-                    headers: {
-                        'Accept': 'application/vnd.github.v3+json',
-                        'Authorization': `token ${this.token}`
-                    }
-                }
-            );
-
-            if (!response.ok) {
-                throw new Error(`无法获取日志: ${response.status}`);
-            }
-
-            return await response.text();
-        } catch (error) {
-            console.error('获取日志失败:', error);
-            throw error;
-        }
     }
 }
 
@@ -405,14 +323,8 @@ class UIManager {
             workflowModal: document.getElementById('workflowModal'),
 
             // 设置表单
-            repoOwner: document.getElementById('repoOwner'),
-            githubToken: document.getElementById('githubToken'),
             refreshInterval: document.getElementById('refreshInterval'),
-
-            // 按钮
-            testConnectionBtn: document.getElementById('testConnectionBtn'),
             saveSettingsBtn: document.getElementById('saveSettingsBtn'),
-            viewLogsBtn: document.getElementById('viewLogsBtn'),
             closeWorkflowBtn: document.getElementById('closeWorkflowBtn'),
 
             // 内容显示
@@ -427,11 +339,9 @@ class UIManager {
         this.elements.settingsBtn.addEventListener('click', () => this.showSettings());
 
         // 设置模态框
-        this.elements.testConnectionBtn.addEventListener('click', () => this.testConnection());
         this.elements.saveSettingsBtn.addEventListener('click', () => this.saveSettings());
 
         // 工作流模态框
-        this.elements.viewLogsBtn.addEventListener('click', () => this.viewWorkflowLogs());
         this.elements.closeWorkflowBtn.addEventListener('click', () => this.hideModal('workflowModal'));
 
         // 模态框关闭事件
@@ -472,66 +382,51 @@ class UIManager {
 
     // 加载设置
     loadSettings() {
-        this.elements.repoOwner.value = githubAPI.repoOwner;
-        this.elements.githubToken.value = githubAPI.token ? '•'.repeat(10) : '';
         this.elements.refreshInterval.value = githubAPI.refreshInterval / 1000;
     }
 
     // 更新UI状态
     updateUIState() {
-        const canRead = githubAPI.isAuthValid();
-        const canWrite = githubAPI.canWrite();
         const canCreateIssue = githubAPI.canCreateIssue();
 
         // 更新按钮状态 - 现在支持基于Issue的同步，只需要仓库所有者
         this.elements.syncBtn.disabled = !canCreateIssue;
 
-        // 更新按钮文本
-        if (canCreateIssue && !canWrite) {
-            this.elements.syncBtn.innerHTML = '🐛 创建Issue同步';
+        // 更新按钮文本 - 统一为Issue同步
+        this.elements.syncBtn.innerHTML = '🐛 创建Issue同步';
+
+        if (canCreateIssue) {
             this.elements.inputSectionHint.style.display = 'block';
-            this.elements.inputSectionHint.innerHTML = '💡 使用GitHub Issues触发同步，无需Token！<br>设置仓库所有者即可开始使用。';
-        } else if (canWrite) {
-            this.elements.syncBtn.innerHTML = '🐛 创建Issue同步';
-            this.elements.inputSectionHint.style.display = 'block';
-            this.elements.inputSectionHint.innerHTML = '💡 支持Issue同步和Token直接同步两种模式';
+            this.elements.inputSectionHint.innerHTML = '💡 使用GitHub Issues触发同步，无需Token！<br>仓库信息已自动检测，直接输入镜像即可开始使用。';
         } else {
-            this.elements.syncBtn.innerHTML = '🐛 创建Issue同步';
             this.elements.inputSectionHint.style.display = 'block';
-            this.elements.inputSectionHint.innerHTML = '💡 请设置仓库所有者以启用Issue同步功能';
+            this.elements.inputSectionHint.innerHTML = '💡 无法检测仓库信息，请确保通过GitHub Pages访问此页面';
         }
 
         // 更新状态显示
-        this.updateRepoStatus(canRead, canCreateIssue, canWrite);
+        this.updateRepoStatus(canCreateIssue);
     }
 
-    // 更新仓库状态显示
-    updateRepoStatus(isAuthValid, canCreateIssue, canWrite) {
-        if (this.githubAPI.repoOwner) {
+    // 更新仓库状态显示 - 简化版
+    updateRepoStatus(canCreateIssue) {
+        if (githubAPI.repoOwner) {
             let statusHtml = `
                 <div class="status-indicator status-valid">
                     <span class="status-icon">✅</span>
-                    <span class="status-text">${this.githubAPI.repoOwner}/${this.githubAPI.repoName}</span>
+                    <span class="status-text">${githubAPI.repoOwner}/${githubAPI.repoName}</span>
                 </div>
             `;
 
-            // 根据权限显示不同提示
-            if (canCreateIssue && !canWrite) {
+            if (canCreateIssue) {
                 statusHtml += `
                     <div class="status-hint">
                         🐛 Issue同步模式 - 无需Token，使用Issues触发同步
                     </div>
                 `;
-            } else if (canWrite) {
-                statusHtml += `
-                    <div class="status-hint">
-                        🚀 完整模式 - 支持直接同步和Issue同步
-                    </div>
-                `;
             } else {
                 statusHtml += `
                     <div class="status-hint">
-                        只读模式 - 需要配置仓库所有者才能使用
+                        需要配置仓库所有者才能使用
                     </div>
                 `;
             }
@@ -563,6 +458,9 @@ class UIManager {
                         <span class="status-icon">✅</span>
                         <span class="status-text">${githubAPI.repoOwner}/${githubAPI.repoName}</span>
                     </div>
+                    <div class="status-hint">
+                        🐛 Issue同步模式 - 无需Token，使用Issues触发同步
+                    </div>
                 `;
             } else {
                 this.elements.repoStatus.innerHTML = `
@@ -576,7 +474,7 @@ class UIManager {
             this.elements.repoStatus.innerHTML = `
                 <div class="status-indicator status-invalid">
                     <span class="status-icon">❌</span>
-                    <span class="status-text">认证失败</span>
+                    <span class="status-text">连接失败</span>
                 </div>
             `;
         }
@@ -588,7 +486,6 @@ class UIManager {
         const isAuthValid = githubAPI.isAuthValid();
 
         this.elements.syncBtn.disabled = !isAuthValid || !hasImages;
-        this.elements.validateBtn.disabled = !isAuthValid || !hasImages;
     }
 
     // 显示设置模态框
@@ -617,87 +514,17 @@ class UIManager {
         this.currentModal = null;
     }
 
-    // 测试连接
-    async testConnection() {
-        const owner = this.elements.repoOwner.value.trim();
-        const token = this.elements.githubToken.value.trim();
-
-        if (!owner || !token) {
-            Utils.showNotification('请填写仓库所有者和GitHub Token', 'error');
-            return;
-        }
-
-        // 临时设置认证信息进行测试
-        const originalAuth = { owner: githubAPI.repoOwner, token: githubAPI.token };
-        githubAPI.setAuth(owner, token);
-
-        this.elements.testConnectionBtn.disabled = true;
-        this.elements.testConnectionBtn.textContent = '🔄 测试中...';
-
-        try {
-            const result = await githubAPI.testConnection();
-            if (result.success) {
-                Utils.showNotification('连接测试成功！', 'success');
-            } else {
-                Utils.showNotification(`连接测试失败: ${result.error}`, 'error');
-            }
-        } catch (error) {
-            Utils.showNotification(`连接测试失败: ${error.message}`, 'error');
-        } finally {
-            // 恢复原始认证信息
-            if (originalAuth.owner && originalAuth.token) {
-                githubAPI.setAuth(originalAuth.owner, originalAuth.token);
-            }
-
-            this.elements.testConnectionBtn.disabled = false;
-            this.elements.testConnectionBtn.textContent = '🔗 测试连接';
-        }
-    }
-
-    // 保存设置
+    
+    // 保存设置 - 极简版
     async saveSettings() {
-        const owner = this.elements.repoOwner.value.trim();
-        let token = this.elements.githubToken.value.trim();
         const refreshInterval = parseInt(this.elements.refreshInterval.value) || 5;
 
-        if (!owner) {
-            Utils.showNotification('请填写仓库所有者', 'error');
-            return;
-        }
-
-        // 处理token输入
-        if (token && token !== '•'.repeat(10)) {
-            // 新token
-            if (!token.startsWith('ghp_')) {
-                Utils.showNotification('GitHub Token格式不正确', 'error');
-                return;
-            }
-        } else if (token === '•'.repeat(10)) {
-            // 保持原有token
-            token = githubAPI.token;
-        } else {
-            // 清空token
-            token = '';
-        }
-
         try {
-            githubAPI.setAuth(owner, token, refreshInterval);
-
-            // 测试连接
-            const result = await githubAPI.testConnection();
-            if (result.success) {
-                if (token) {
-                    Utils.showNotification('设置保存成功！已启用完整功能', 'success');
-                } else {
-                    Utils.showNotification('设置保存成功！已启用Issue同步模式', 'success');
-                }
-                this.hideModal('settingsModal');
-                this.updateUIState();
-                await this.loadHistory();
-                await this.loadCurrentImages();
-            } else {
-                Utils.showNotification(`连接失败: ${result.error}`, 'error');
-            }
+            githubAPI.setAuth(refreshInterval);
+            Utils.showNotification('设置保存成功！', 'success');
+            this.hideModal('settingsModal');
+            await this.loadHistory();
+            await this.loadCurrentImages();
         } catch (error) {
             Utils.showNotification(`保存设置失败: ${error.message}`, 'error');
         }
@@ -823,17 +650,11 @@ class UIManager {
         }, 5 * 60 * 1000);
     }
 
-    // 加载历史记录
+    // 加载历史记录 - 简化版
     async loadHistory() {
         try {
-            let runs;
-            if (githubAPI.canWrite()) {
-                // 有token时获取完整信息
-                runs = await githubAPI.getAllWorkflowRuns(10);
-            } else {
-                // 无token时获取公开工作流信息
-                runs = await githubAPI.request(`/repos/${githubAPI.repoOwner}/${githubAPI.repoName}/actions/runs?per_page=10`);
-            }
+            // 仅获取公开工作流信息
+            const runs = await githubAPI.request(`/repos/${githubAPI.repoOwner}/${githubAPI.repoName}/actions/runs?per_page=10`);
             this.displayHistory(runs.workflow_runs || []);
         } catch (error) {
             console.warn('加载历史记录失败:', error);
@@ -918,42 +739,7 @@ class UIManager {
         }
     }
 
-    // 查看工作流日志
-    async viewWorkflowLogs() {
-        if (!this.currentWorkflowId) {
-            Utils.showNotification('没有可查看的日志', 'warning');
-            return;
-        }
-
-        try {
-            const logs = await githubAPI.getWorkflowLogs(this.currentWorkflowId);
-
-            // 在新窗口中显示日志
-            const logWindow = window.open('', '_blank');
-            logWindow.document.write(`
-                <html>
-                    <head>
-                        <title>工作流日志</title>
-                        <style>
-                            body { font-family: monospace; white-space: pre-wrap; padding: 20px; }
-                            .log-line { margin: 2px 0; }
-                            .error { color: red; }
-                            .warning { color: orange; }
-                            .info { color: blue; }
-                        </style>
-                    </head>
-                    <body>
-                        <pre>${logs}</pre>
-                    </body>
-                </html>
-            `);
-            logWindow.document.close();
-
-        } catch (error) {
-            Utils.showNotification(`获取日志失败: ${error.message}`, 'error');
-        }
-    }
-
+  
     // 加载当前镜像配置
     async loadCurrentImages() {
         try {
