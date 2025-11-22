@@ -268,8 +268,8 @@ smart_sync_images() {
         # 设置输出环境变量
         if [ -n "$OUTPUT_ENV_FILE" ]; then
             echo "TOTAL_COUNT=$total_images" >> "$OUTPUT_ENV_FILE"
-            echo "SUCCESS_COUNT=$total_images" >> "$OUTPUT_ENV_FILE"
-            echo "SKIPPED_COUNT=0" >> "$OUTPUT_ENV_FILE"
+            echo "SUCCESS_COUNT=0" >> "$OUTPUT_ENV_FILE"
+            echo "SKIPPED_COUNT=$total_images" >> "$OUTPUT_ENV_FILE"
 
             echo "SUCCESS_IMAGES<<EOF" >> "$OUTPUT_ENV_FILE"
             echo "所有镜像已存在，无需同步" >> "$OUTPUT_ENV_FILE"
