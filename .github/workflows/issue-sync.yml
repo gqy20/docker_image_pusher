@@ -171,8 +171,8 @@ jobs:
         echo "=============================================================================="
 
         # 保存结果用于评论 - 确保计数一致
-        echo "total_count=$TOTAL_COUNT" >> $GITHUB_ENV
-        echo "success_count=$SUCCESS_COUNT" >> $GITHUB_ENV
+        echo "TOTAL_COUNT=$TOTAL_COUNT" >> $GITHUB_ENV
+        echo "SUCCESS_COUNT=$SUCCESS_COUNT" >> $GITHUB_ENV
 
     - name: Add final comment
       if: always()
