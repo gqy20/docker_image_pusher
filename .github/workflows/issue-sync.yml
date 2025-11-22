@@ -66,6 +66,20 @@ jobs:
 
         echo "Found ${image_count:-0} valid images to sync"
 
+        # 调试：打印提取的镜像内容
+        echo "🔍 调试信息：extracted_images.txt 内容"
+        echo "=============================================="
+        if [ -f extracted_images.txt ]; then
+            echo "📁 extracted_images.txt 存在，内容如下："
+            cat extracted_images.txt
+            echo ""
+            echo "📊 文件行数: $(cat extracted_images.txt | wc -l)"
+            echo "📊 文件大小: $(wc -c < extracted_images.txt) 字节"
+        else
+            echo "❌ extracted_images.txt 文件不存在！"
+        fi
+        echo "=============================================="
+
         # 使用镜像处理脚本进行智能同步（跳过已存在的镜像）
         ./scripts/image-processor.sh -f extracted_images.txt -o sync-result.env -s
 
