@@ -183,6 +183,7 @@ smart_sync_images() {
 
     # 检测现有镜像并生成需要同步的列表
     echo "📊 检测现有镜像..."
+    echo "🐛 调试：开始检测现有镜像阶段"
     local total_images=0
     local needed_images=0
     EXISTING_IMAGES=""
@@ -255,8 +256,11 @@ smart_sync_images() {
             echo "$line" >> "$temp_sync_file"
         fi
 
+        echo "🐛 调试：完成处理镜像 $total_images - $image_name"
+
     done < "$input_file"
 
+    echo "🐛 调试：完成镜像检测循环"
     echo "=============================================================================="
     echo "📊 智能同步分析结果:"
     echo "  📋 总镜像数: $total_images 个镜像"
