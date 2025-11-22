@@ -110,24 +110,15 @@ const Utils = {
     }
 };
 
-// GitHub API集成类 - 简化版，无需Token
+// GitHub API集成类 - 硬编码版，无需API调用
 class GitHubAPI {
     constructor() {
-        this.baseURL = 'https://api.github.com';
+        // 硬编码仓库信息，完全避免API调用
+        this.repoOwner = 'gqy20';
         this.repoName = 'docker_image_pusher';
-
-        // 自动检测仓库所有者
-        const hostname = window.location.hostname;
-        if (hostname.includes('github.io')) {
-            // 从 gqy20.github.io 提取 gqy20
-            this.repoOwner = hostname.split('.')[0];
-        } else {
-            this.repoOwner = Utils.storage.get('repo_owner', '');
-        }
-
         this.refreshInterval = Utils.storage.get('refresh_interval', 5) * 1000;
 
-        console.log('检测到仓库所有者:', this.repoOwner);
+        console.log('使用硬编码仓库信息:', `${this.repoOwner}/${this.repoName}`);
     }
 
     // 设置认证信息 - 极简版（仅设置刷新间隔）
@@ -170,9 +161,9 @@ ${imageList}
         );
     }
 
-    // 检查是否可以创建Issue（公共仓库不需要token）
+    // 检查是否可以创建Issue - 硬编码版，总是返回true
     canCreateIssue() {
-        return !!this.repoOwner;
+        return true; // 使用硬编码信息，总是可以创建Issue
     }
 
     // 通用请求方法 - 简化版，仅使用公开API
@@ -202,29 +193,18 @@ ${imageList}
         }
     }
 
-    // 测试连接 - 简化版，直接返回成功（假设通过GitHub Pages访问）
+    // 测试连接 - 硬编码版，直接返回成功
     async testConnection() {
-        if (!this.isAuthValid()) {
-            return {
-                success: false,
-                error: '无法检测仓库信息',
-                message: '连接失败'
-            };
-        }
-
-        try {
-            // 由于CORS限制，我们假设通过GitHub Pages访问的都是有效的
-            return {
-                success: true,
-                message: '连接成功'
-            };
-        } catch (error) {
-            return {
-                success: false,
-                error: error.message,
-                message: '连接失败'
-            };
-        }
+        // 使用硬编码信息，总是返回成功
+        return {
+            success: true,
+            message: '连接成功',
+            repo: {
+                name: this.repoName,
+                full_name: `${this.repoOwner}/${this.repoName}`,
+                html_url: `https://github.com/${this.repoOwner}/${this.repoName}`
+            }
+        };
     }
 
     // 获取仓库信息
@@ -368,18 +348,15 @@ class UIManager {
         this.elements.imageInput.addEventListener('input', () => this.updateButtonStates());
     }
 
-    // 加载初始数据 - 简化版
+    // 加载初始数据 - 硬编码版
     async loadInitialData() {
         // 恢复设置
         this.loadSettings();
 
-        // 更新UI状态
+        // 更新UI状态（使用硬编码信息）
         this.updateUIState();
 
-        // 跳过API调用以避免CORS问题
-        if (githubAPI.isAuthValid()) {
-            console.log('仓库信息已自动检测，跳过API调用以避免CORS限制');
-        }
+        console.log('使用硬编码仓库信息，无需API调用');
     }
 
     // 加载设置
@@ -387,92 +364,48 @@ class UIManager {
         this.elements.refreshInterval.value = githubAPI.refreshInterval / 1000;
     }
 
-    // 更新UI状态
+    // 更新UI状态 - 硬编码版，总是可用
     updateUIState() {
-        const canCreateIssue = githubAPI.canCreateIssue();
-
-        // 更新按钮状态 - 现在支持基于Issue的同步，只需要仓库所有者
-        this.elements.syncBtn.disabled = !canCreateIssue;
-
-        // 更新按钮文本 - 统一为Issue同步
+        // 使用硬编码信息，功能总是可用
+        this.elements.syncBtn.disabled = false;
         this.elements.syncBtn.innerHTML = '🐛 创建Issue同步';
 
-        if (canCreateIssue) {
-            this.elements.inputSectionHint.style.display = 'block';
-            this.elements.inputSectionHint.innerHTML = '💡 使用GitHub Issues触发同步，无需Token！<br>仓库信息已自动检测，直接输入镜像即可开始使用。';
-        } else {
-            this.elements.inputSectionHint.style.display = 'block';
-            this.elements.inputSectionHint.innerHTML = '💡 无法检测仓库信息，请确保通过GitHub Pages访问此页面';
-        }
+        // 显示友好的提示信息
+        this.elements.inputSectionHint.style.display = 'block';
+        this.elements.inputSectionHint.innerHTML = '💡 使用GitHub Issues触发同步，无需Token！<br>仓库信息已配置，直接输入镜像即可开始使用。';
 
         // 更新状态显示
-        this.updateRepoStatus(canCreateIssue);
+        this.updateRepoStatus();
     }
 
-    // 更新仓库状态显示 - 简化版
-    updateRepoStatus(canCreateIssue) {
-        if (githubAPI.repoOwner) {
-            let statusHtml = `
-                <div class="status-indicator status-valid">
-                    <span class="status-icon">✅</span>
-                    <span class="status-text">${githubAPI.repoOwner}/${githubAPI.repoName}</span>
-                </div>
-            `;
+    // 更新仓库状态显示 - 硬编码版，总是显示成功
+    updateRepoStatus() {
+        // 使用硬编码信息，总是显示成功状态
+        const statusHtml = `
+            <div class="status-indicator status-valid">
+                <span class="status-icon">✅</span>
+                <span class="status-text">${githubAPI.repoOwner}/${githubAPI.repoName}</span>
+            </div>
+            <div class="status-hint">
+                🐛 Issue同步模式 - 无需Token，使用Issues触发同步
+            </div>
+        `;
 
-            if (canCreateIssue) {
-                statusHtml += `
-                    <div class="status-hint">
-                        🐛 Issue同步模式 - 无需Token，使用Issues触发同步
-                    </div>
-                `;
-            } else {
-                statusHtml += `
-                    <div class="status-hint">
-                        需要配置仓库所有者才能使用
-                    </div>
-                `;
-            }
-
-            this.elements.repoStatus.innerHTML = statusHtml;
-
-            // 测试连接
-            this.testConnectionSilent();
-        } else {
-            this.elements.repoStatus.innerHTML = `
-                <div class="status-indicator status-invalid">
-                    <span class="status-icon">❌</span>
-                    <span class="status-text">无法检测仓库信息</span>
-                </div>
-                <div class="status-hint">
-                    请确保通过GitHub Pages访问此页面
-                </div>
-            `;
-        }
+        this.elements.repoStatus.innerHTML = statusHtml;
     }
 
-    // 静默测试连接 - 简化版，直接显示成功状态
+    // 静默测试连接 - 硬编码版，直接显示成功状态
     async testConnectionSilent() {
-        if (githubAPI.repoOwner) {
-            this.elements.repoStatus.innerHTML = `
-                <div class="status-indicator status-valid">
-                    <span class="status-icon">✅</span>
-                    <span class="status-text">${githubAPI.repoOwner}/${githubAPI.repoName}</span>
-                </div>
-                <div class="status-hint">
-                    🐛 Issue同步模式 - 无需Token，使用Issues触发同步
-                </div>
-            `;
-        } else {
-            this.elements.repoStatus.innerHTML = `
-                <div class="status-indicator status-invalid">
-                    <span class="status-icon">❌</span>
-                    <span class="status-text">无法检测仓库信息</span>
-                </div>
-                <div class="status-hint">
-                    请确保通过GitHub Pages访问此页面
-                </div>
-            `;
-        }
+        // 使用硬编码信息，总是显示成功
+        this.elements.repoStatus.innerHTML = `
+            <div class="status-indicator status-valid">
+                <span class="status-icon">✅</span>
+                <span class="status-text">${githubAPI.repoOwner}/${githubAPI.repoName}</span>
+            </div>
+            <div class="status-hint">
+                🐛 Issue同步模式 - 无需Token，使用Issues触发同步
+            </div>
+        `;
     }
 
     // 更新按钮状态
