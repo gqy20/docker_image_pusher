@@ -153,8 +153,8 @@ smart_sync_images() {
         fi
 
         # 提取镜像信息
-        local platform=""
-        local image="$line"
+        platform=""
+        image="$line"
         if echo "$line" | grep -q -- '--platform'; then
             platform=$(echo "$line" | awk -F'--platform[ =]' '{if (NF>1) print $2}' | awk '{print $1}')
             image=$(echo "$line" | awk '{print $NF}')
@@ -164,11 +164,11 @@ smart_sync_images() {
         image="${image%%@*}"
 
         # 获取镜像名:版本号
-        local image_name_tag=$(echo "$image" | awk -F'/' '{print $NF}')
-        local image_name=$(echo "$image_name_tag" | awk -F':' '{print $1}')
+        image_name_tag=$(echo "$image" | awk -F'/' '{print $NF}')
+        image_name=$(echo "$image_name_tag" | awk -F':' '{print $1}')
 
         # 获取命名空间
-        local name_space=$(echo "$image" | awk -F'/' '{if (NF==3) print $2; else if (NF==2) print $1; else print ""}')
+        name_space=$(echo "$image" | awk -F'/' '{if (NF==3) print $2; else if (NF==2) print $1; else print ""}')
 
         # 检测重名镜像
         if [[ -n "${temp_map[$image_name]}" ]]; then
@@ -184,26 +184,32 @@ smart_sync_images() {
     # 检测现有镜像并生成需要同步的列表
     echo "📊 检测现有镜像..."
     echo "🐛 调试：开始检测现有镜像阶段"
-    local total_images=0
-    local needed_images=0
+    total_images=0
+    needed_images=0
     EXISTING_IMAGES=""
+    echo "🐛 调试：变量初始化完成"
 
     # 创建临时文件存储需要同步的镜像
-    local temp_sync_file="needed_images.txt"
+    temp_sync_file="needed_images.txt"
     > "$temp_sync_file"
+    echo "🐛 调试：临时文件创建完成"
 
     while IFS= read -r line || [ -n "$line" ]; do
+        echo "🐛 调试：开始处理一行: '$line'"
         # 使用统一的过滤逻辑
-        [[ -z "$line" ]] && continue
+        [[ -z "$line" ]] && echo "🐛 调试：跳过空行" && continue
         if echo "$line" | grep -q '^\s*#'; then
+            echo "🐛 调试：跳过注释行: $line"
             continue
         fi
 
-        ((total_images++))
+        echo "🐛 调试：准备递增total_images，当前值: $total_images"
+        total_images=$((total_images + 1))
+        echo "🐛 调试：递增total_images完成，新值: $total_images"
 
         # 提取镜像信息
-        local platform=""
-        local image="$line"
+        platform=""
+        image="$line"
         if echo "$line" | grep -q -- '--platform'; then
             platform=$(echo "$line" | awk -F'--platform[ =]' '{if (NF>1) print $2}' | awk '{print $1}')
             image=$(echo "$line" | awk '{print $NF}')
@@ -213,20 +219,20 @@ smart_sync_images() {
         image="${image%%@*}"
 
         # 获取镜像名:版本号
-        local image_name_tag=$(echo "$image" | awk -F'/' '{print $NF}')
-        local image_name=$(echo "$image_name_tag" | awk -F':' '{print $1}')
+        image_name_tag=$(echo "$image" | awk -F'/' '{print $NF}')
+        image_name=$(echo "$image_name_tag" | awk -F':' '{print $1}')
 
         # 获取命名空间
-        local name_space=$(echo "$image" | awk -F'/' '{if (NF==3) print $2; else if (NF==2) print $1; else print ""}')
+        name_space=$(echo "$image" | awk -F'/' '{if (NF==3) print $2; else if (NF==2) print $1; else print ""}')
 
         # 生成平台前缀
-        local platform_prefix=""
+        platform_prefix=""
         if [ -n "$platform" ]; then
             platform_prefix="${platform//\//_}_"
         fi
 
         # 处理重名镜像
-        local name_space_prefix=""
+        name_space_prefix=""
         if [[ -n "${duplicate_images[$image_name]}" ]]; then
            if [[ -n "$name_space" ]]; then
               name_space_prefix="${name_space}_"
@@ -235,12 +241,12 @@ smart_sync_images() {
 
         # 生成最终镜像名（与同步阶段完全一致）
         image_name_tag="${image_name_tag%%@*}"
-        local final_image="$ALIYUN_REGISTRY/$ALIYUN_NAME_SPACE/${platform_prefix}${name_space_prefix}${image_name_tag}"
+        final_image="$ALIYUN_REGISTRY/$ALIYUN_NAME_SPACE/${platform_prefix}${name_space_prefix}${image_name_tag}"
 
         echo "🔍 检测镜像: $final_image (原始: $line)"
 
         # 使用docker manifest检查镜像是否存在（避免因失败导致脚本退出）
-        local manifest_result=0
+        manifest_result=0
         docker manifest inspect "$final_image" >/dev/null 2>&1 || manifest_result=$?
 
         if [ $manifest_result -eq 0 ]; then
@@ -358,13 +364,13 @@ sync_images() {
         fi
 
         ((total_count++))
-        local original_line="$line"
+        original_line="$line"
         echo ""
         echo "📦 处理镜像 [$total_count]: $line"
 
         # 检查是否包含平台参数
-        local platform_param=""
-        local image_name="$line"
+        platform_param=""
+        image_name="$line"
         if echo "$line" | grep -q -- '--platform'; then
             platform_param=$(echo "$line" | awk -F'--platform[ =]' '{if (NF>1) print $2}' | awk '{print $1}')
             image_name=$(echo "$line" | awk '{print $NF}')
@@ -375,14 +381,14 @@ sync_images() {
             echo "✅ 拉取成功"
 
             # 生成目标镜像名
-            local platform_prefix=""
+            platform_prefix=""
             if [ -n "$platform_param" ]; then
                 platform_prefix="${platform_param//\//_}_"
             fi
 
             # 获取镜像基本信息
-            local image_name_tag=$(echo "$image_name" | awk -F'/' '{print $NF}')
-            local new_image="$ALIYUN_REGISTRY/$ALIYUN_NAME_SPACE/${platform_prefix}$image_name_tag"
+            image_name_tag=$(echo "$image_name" | awk -F'/' '{print $NF}')
+            new_image="$ALIYUN_REGISTRY/$ALIYUN_NAME_SPACE/${platform_prefix}$image_name_tag"
 
             echo "🏷️  docker tag $image_name $new_image"
             docker tag $image_name $new_image
