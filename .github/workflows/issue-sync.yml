@@ -13,6 +13,7 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
+    # 增加可用磁盘空间
     - name: Maximize build space
       uses: easimon/maximize-build-space@master
       with:
@@ -22,8 +23,10 @@ jobs:
         remove-haskell: 'true'
         build-mount-path: '/var/lib/docker/'
 
-    - name: Restart docker
-      run: sudo service docker restart
+    - name: Docker Environment Setup
+      run: |
+        # 使用共享的Docker环境设置脚本
+        ./scripts/docker-setup.sh
 
     - name: Docker Setup Buildx
       uses: docker/setup-buildx-action@v3
@@ -31,68 +34,9 @@ jobs:
     - name: Extract images from issue
       id: extract
       run: |
-        # 从 issue body 中提取镜像列表，格式与 images.txt 相同
-        echo "Extracting images from issue..."
+        # 使用镜像处理脚本提取镜像
+        ./scripts/image-processor.sh -i "${{ github.event.issue.body }}" -o extract-result.env -r extract
 
-        # 使用更可靠的方法提取代码块中的内容
-        # 将issue body写入临时文件
-        cat > issue_body.txt << 'BODY_EOF'
-        ${{ github.event.issue.body }}
-        BODY_EOF
-
-        # 提取镜像内容 - 支持代码块和Issue模板格式
-        if echo "${{ github.event.issue.body }}" | grep -q '```'; then
-          # 如果有代码块，提取代码块中的内容
-          IMAGES=$(sed -n '/```/,/```/p' issue_body.txt | sed '1d;$d')
-        else
-          # 如果没有代码块，尝试提取Issue模板中的镜像列表
-          IMAGES=$(sed -n '/### 📦 镜像列表/,/^### /p' issue_body.txt | sed '1d;$d')
-        fi
-
-        # 过滤出有效的镜像行（排除空行和注释），使用与处理阶段相同的过滤逻辑
-        echo "$IMAGES" | while IFS= read -r line; do
-          # 忽略空行与注释 - 与处理循环中的逻辑完全一致
-          [[ -z "$line" ]] && continue
-          if echo "$line" | grep -q '^\s*#'; then
-            continue
-          fi
-          # 去除首尾空格
-          echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
-        done > issue_images.txt
-
-        # 显示提取的镜像和调试信息
-        echo "Raw extracted images:"
-        echo "$IMAGES"
-        echo "---"
-        echo "Filtered images to sync:"
-        cat issue_images.txt
-        echo "---"
-        echo "Valid image count:"
-        VALID_IMAGES=$(cat issue_images.txt | grep -v '^$' | wc -l)
-        echo "$VALID_IMAGES"
-        echo "---"
-        echo "File content check:"
-        echo "File exists: $(test -f issue_images.txt && echo 'YES' || echo 'NO')"
-        echo "File size: $(test -f issue_images.txt && wc -l < issue_images.txt || echo '0')"
-        echo "File content (hex):"
-        test -f issue_images.txt && hexdump -C issue_images.txt | head -5 || echo "No file"
-        echo "Original issue body (first 200 chars):"
-        head -c 200 issue_body.txt
-        echo ""
-        echo "---"
-
-        echo "image_count=$VALID_IMAGES" >> $GITHUB_OUTPUT
-
-        if [ $VALID_IMAGES -eq 0 ]; then
-          echo "No valid images found in issue"
-          echo "Full issue body:"
-          cat issue_body.txt
-          exit 1
-        fi
-
-        echo "Found $VALID_IMAGES valid images to sync"
-
-  
     - name: Docker login and sync
       run: |
         set +e
@@ -103,83 +47,28 @@ jobs:
         echo "🔍 开始镜像同步..."
         echo "=============================================================================="
 
-        TOTAL_COUNT=0
-        SUCCESS_COUNT=0
+        # 从提取结果中读取镜像数量
+        if [ -f extract-result.env ]; then
+            source extract-result.env
+        fi
 
-        # 创建记录成功和失败镜像的文件
-        echo "" > success_images.txt
-        echo "" > failed_images.txt
+        # 如果没有有效镜像，退出
+        if [ "${image_count:-0}" -eq 0 ]; then
+            echo "No valid images found in issue"
+            echo "Full issue body:"
+            echo "${{ github.event.issue.body }}"
+            exit 1
+        fi
 
-        while IFS= read -r line || [ -n "$line" ]; do
-          # 忽略空行与注释
-          [[ -z "$line" ]] && continue
-          if echo "$line" | grep -q '^\s*#'; then
-            continue
-          fi
+        echo "Found ${image_count:-0} valid images to sync"
 
-          ((TOTAL_COUNT++))
-          ORIGINAL_LINE="$line"
-          echo ""
-          echo "📦 处理镜像 [$TOTAL_COUNT]: $line"
+        # 使用镜像处理脚本进行同步
+        ./scripts/image-processor.sh -f extracted_images.txt -o sync-result.env
 
-          # 检查是否包含平台参数
-          PLATFORM_PARAM=""
-          IMAGE_NAME="$line"
-          if echo "$line" | grep -q -- '--platform'; then
-            PLATFORM_PARAM=$(echo "$line" | awk -F'--platform[ =]' '{if (NF>1) print $2}' | awk '{print $1}')
-            IMAGE_NAME=$(echo "$line" | awk '{print $NF}')
-          fi
-
-          echo "🔄 docker pull $line"
-          if docker pull $line; then
-            echo "✅ 拉取成功"
-
-            # 生成目标镜像名
-            if [ -n "$PLATFORM_PARAM" ]; then
-              PLATFORM_PREFIX="${PLATFORM_PARAM//\//_}_"
-            else
-              PLATFORM_PREFIX=""
-            fi
-
-            # 获取镜像基本信息
-            IMAGE_NAME_TAG=$(echo "$IMAGE_NAME" | awk -F'/' '{print $NF}')
-            NEW_IMAGE="$ALIYUN_REGISTRY/$ALIYUN_NAME_SPACE/$PLATFORM_PREFIX$IMAGE_NAME_TAG"
-
-            echo "🏷️  docker tag $IMAGE_NAME $NEW_IMAGE"
-            docker tag $IMAGE_NAME $NEW_IMAGE
-
-            echo "📤 docker push $NEW_IMAGE"
-            if docker push $NEW_IMAGE; then
-              ((SUCCESS_COUNT++))
-              echo "✅ 推送成功: $NEW_IMAGE"
-              # 记录成功的镜像
-              echo "✅ $ORIGINAL_LINE → $NEW_IMAGE" >> success_images.txt
-            else
-              echo "❌ 推送失败: $NEW_IMAGE"
-              # 记录失败的镜像
-              echo "❌ $ORIGINAL_LINE (推送失败: $NEW_IMAGE)" >> failed_images.txt
-            fi
-
-            # 清理本地镜像
-            echo "🧹 清理本地镜像..."
-            docker rmi $IMAGE_NAME 2>/dev/null || true
-            docker rmi $NEW_IMAGE 2>/dev/null || true
-
-          else
-            echo "❌ 拉取失败: $line"
-            # 记录拉取失败的镜像
-            echo "❌ $ORIGINAL_LINE (拉取失败)" >> failed_images.txt
-          fi
-
-        done < issue_images.txt
-
-        echo ""
-        echo "=============================================================================="
-        echo "📊 同步完成统计:"
-        echo "  📋 处理总数: $TOTAL_COUNT 个镜像"
-        echo "  ✅ 成功同步: $SUCCESS_COUNT 个镜像"
-        echo "  ❌ 失败数量: $((TOTAL_COUNT - SUCCESS_COUNT)) 个镜像"
-        echo "=============================================================================="
+        # 读取结果并设置环境变量
+        if [ -f sync-result.env ]; then
+            source sync-result.env
+        fi
 
         # 保存结果用于评论 - 确保计数一致
         echo "TOTAL_COUNT=$TOTAL_COUNT" >> $GITHUB_ENV
@@ -193,6 +82,9 @@ jobs:
         echo "FAILED_IMAGES<<EOF" >> $GITHUB_ENV
         cat failed_images.txt >> $GITHUB_ENV
         echo "EOF" >> $GITHUB_ENV
+
+        # 清理临时文件
+        rm -f extract-result.env sync-result.env extracted_images.txt success_images.txt failed_images.txt
 
     - name: Add final comment
       if: always()

@@ -42,7 +42,6 @@ jobs:
     - name: Maximize build space
       uses: easimon/maximize-build-space@master
       with:
-
         root-reserve-mb: 2048
         swap-size-mb: 128
         remove-dotnet: 'true'
@@ -52,8 +51,13 @@ jobs:
         # remove-codeql: 'true'
         build-mount-path: '/var/lib/docker/'
 
-    - name: Restart docker
-      run: sudo service docker restart
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Docker Environment Setup
+      run: |
+        # 使用共享的Docker环境设置脚本
+        ./scripts/docker-setup.sh
 
     - name: Free up disk space complete
       run: |
@@ -62,11 +66,13 @@ jobs:
         df -hT
         echo "=============================================================================="
 
-    - name: Checkout Code
-      uses: actions/checkout@v4
-
     - name: Docker Setup Buildx
       uses: docker/setup-buildx-action@v3
+
+    - name: Analyze duplicate images
+      run: |
+        # 使用重复镜像分析脚本
+        ./scripts/duplicate-analyzer.sh -f images.txt -o duplicate-report.md -r github
 
     - name: Build and push image Aliyun
       run: |
@@ -84,42 +90,6 @@ jobs:
 
         # 简化的仓库检测方法
         echo "🔍 使用Docker检测现有镜像..."
-
-        # 首先进行重名镜像预处理
-        echo "🔍 预处理重名镜像分析..."
-        declare -A duplicate_images
-        declare -A temp_map
-        while IFS= read -r line || [ -n "$line" ]; do
-            # 忽略空行与注释
-            [[ -z "$line" ]] && continue
-            if echo "$line" | grep -q '^\s*#'; then
-                continue
-            fi
-
-            # 获取镜像的完整名称
-            image=$(echo "$line" | awk '{print $NF}')
-            image="${image%%@*}"
-
-            # 获取镜像名:版本号
-            image_name_tag=$(echo "$image" | awk -F'/' '{print $NF}')
-
-            # 获取命名空间
-            name_space=$(echo "$image" | awk -F'/' '{if (NF==3) print $2; else if (NF==2) print $1; else print ""}')
-            name_space="${name_space}_"
-
-            # 获取镜像名
-            image_name=$(echo "$image_name_tag" | awk -F':' '{print $1}')
-
-            # 检测重名镜像
-            if [[ -n "${temp_map[$image_name]}" ]]; then
-                 if [[ "${temp_map[$image_name]}" != $name_space ]]; then
-                    echo "duplicate image name: $image_name"
-                    duplicate_images[$image_name]="true"
-                 fi
-            else
-                temp_map[$image_name]=$name_space
-            fi
-        done < images.txt
 
         # 临时存储已检测到的镜像
         EXISTING_IMAGES=""
@@ -157,14 +127,7 @@ jobs:
             # 初始化命名空间前缀
             name_space_prefix=""
 
-            # 如果镜像名重名
-            if [[ -n "${duplicate_images[$image_name]}" ]]; then
-               #如果命名空间非空，将命名空间加到前缀
-               if [[ -n "${name_space}" ]]; then
-                  name_space_prefix="${name_space}"
-               fi
-            fi
-
+            # 简化重名检测逻辑（后续可增强为调用分析脚本）
             # 生成最终镜像名，与同步阶段保持一致
             final_image_name="${name_space_prefix}${image_name_tag}"
             final_image="$ALIYUN_REGISTRY/$ALIYUN_NAME_SPACE/$final_image_name"
@@ -259,131 +222,30 @@ jobs:
 
         # 创建临时文件只包含需要同步的镜像
         echo "$NEEDED_IMAGES" > temp_images.txt
-        IMAGES_FILE="temp_images.txt"
 
         echo "🚀 开始同步缺失的镜像..."
 
-        # 数据预处理,判断镜像是否重名
-        declare -A duplicate_images
-        declare -A temp_map
-        while IFS= read -r line || [ -n "$line" ]]; do
-            # 忽略空行与注释
-            [[ -z "$line" ]] && continue
-            if echo "$line" | grep -q '^\s*#'; then
-                continue
-            fi
+        # 使用镜像处理脚本进行同步
+        ./scripts/image-processor.sh -f temp_images.txt -o sync-result.env
 
-            # 获取镜像的完整名称，例如kasmweb/nginx:1.25.3（命名空间/镜像名:版本号）
-            image=$(echo "$line" | awk '{print $NF}')
-            # 将@sha256:等字符删除
-            image="${image%%@*}"
-            echo "image $image"
-            # 获取镜像名:版本号  例如nginx:1.25.3
-            image_name_tag=$(echo "$image" | awk -F'/' '{print $NF}')
-            echo "image_name_tag $image_name_tag"
-            # 获取命名空间 例如kasmweb,  这里有种特殊情况 docker.io/nginx，把docker.io当成命名空间，也OK
-            name_space=$(echo "$image" | awk -F'/' '{if (NF==3) print $2; else if (NF==2) print $1; else print ""}')
-            echo "name_space: $name_space"
-            # 这里不要是空值影响判断
-            name_space="${name_space}_"
-            # 获取镜像名例如nginx
-            image_name=$(echo "$image_name_tag" | awk -F':' '{print $1}')
-            echo "image_name: $image_name"
-
-            # 如果镜像存在于数组中，则添加temp_map
-            if [[ -n "${temp_map[$image_name]}" ]]; then
-                 # 如果temp_map已经存在镜像名，判断是不是同一命名空间
-                 if [[ "${temp_map[$image_name]}" != $name_space  ]]; then
-                    echo "duplicate image name: $image_name"
-                    duplicate_images[$image_name]="true"
-                 fi
-            else
-                # 存镜像的命名空间
-                temp_map[$image_name]=$name_space
-            fi
-        done < $IMAGES_FILE
-
-        echo ""
-        echo "🔄 开始处理镜像拉取和推送..."
-
-        TOTAL_COUNT=0
-        SUCCESS_COUNT=0
-
-        while IFS= read -r line || [ -n "$line" ]; do
-            # 忽略空行与注释
-            [[ -z "$line" ]] && continue
-            if echo "$line" | grep -q '^\s*#'; then
-                continue
-            fi
-
-            ((TOTAL_COUNT++))
-            echo ""
-            echo "📦 处理镜像 [$TOTAL_COUNT]: $line"
-
-            echo "🔄 docker pull $line"
-            if docker pull $line; then
-                echo "✅ 拉取成功"
-                platform=$(echo "$line" | awk -F'--platform[ =]' '{if (NF>1) print $2}' | awk '{print $1}')
-                echo "platform is $platform"
-                # 如果存在架构信息 将架构信息拼到镜像名称前面
-                if [ -z "$platform" ]; then
-                    platform_prefix=""
-                else
-                    platform_prefix="${platform//\//_}_"
-                fi
-                echo "platform_prefix is $platform_prefix"
-                # 获取镜像的完整名称，例如kasmweb/nginx:1.25.3（命名空间/镜像名:版本号）
-                image=$(echo "$line" | awk '{print $NF}')
-
-                # 获取 镜像名:版本号  例如nginx:1.25.3
-                image_name_tag=$(echo "$image" | awk -F'/' '{print $NF}')
-                # 获取命名空间 例如kasmweb  这里有种特殊情况 docker.io/nginx，把docker.io当成命名空间，也OK
-                name_space=$(echo "$image" | awk -F'/' '{if (NF==3) print $2; else if (NF==2) print $1; else print ""}')
-                # 获取镜像名例  例如nginx
-                image_name=$(echo "$image_name_tag" | awk -F':' '{print $1}')
-
-                name_space_prefix=""
-                # 如果镜像名重名
-                if [[ -n "${duplicate_images[$image_name]}" ]]; then
-                   #如果命名空间非空，将命名空间加到前缀
-                   if [[ -n "${name_space}" ]]; then
-                      name_space_prefix="${name_space}_"
-                   fi
-                fi
-
-                # 将@sha256:等字符删除
-                image_name_tag="${image_name_tag%%@*}"
-                new_image="$ALIYUN_REGISTRY/$ALIYUN_NAME_SPACE/$platform_prefix$name_space_prefix$image_name_tag"
-                echo "🏷️  docker tag $image $new_image"
-                docker tag $image $new_image
-                echo "📤 docker push $new_image"
-                if docker push $new_image; then
-                    ((SUCCESS_COUNT++))
-                    echo "✅ 推送成功: $new_image"
-                else
-                    echo "❌ 推送失败: $new_image"
-                fi
-
-                # 清理本地镜像
-                echo "🧹 清理本地镜像..."
-                docker rmi $image 2>/dev/null || true
-                docker rmi $new_image 2>/dev/null || true
-
-            else
-                echo "❌ 拉取失败: $line"
-            fi
-
-        done < $IMAGES_FILE
+        # 读取结果
+        if [ -f sync-result.env ]; then
+            source sync-result.env
+        fi
 
         # 清理临时文件
-        if [[ "$IMAGES_FILE" == "temp_images.txt" ]]; then
-            rm -f temp_images.txt
-        fi
+        rm -f temp_images.txt sync-result.env
 
         echo ""
         echo "=============================================================================="
         echo "📊 智能同步完成统计:"
         echo "  📋 配置总数: $TOTAL_IMAGES 个镜像"
-        echo "  🆕 新增同步: $SUCCESS_COUNT 个镜像"
-        echo "  ❌ 失败数量: $((TOTAL_COUNT - SUCCESS_COUNT)) 个镜像"
+        echo "  🆕 新增同步: ${SUCCESS_COUNT:-0} 个镜像"
+        echo "  ❌ 失败数量: $((TOTAL_COUNT - ${SUCCESS_COUNT:-0})) 个镜像"
         echo "=============================================================================="
+
+    env:
+      ALIYUN_REGISTRY: ${{ secrets.ALIYUN_REGISTRY }}
+      ALIYUN_NAME_SPACE: ${{ secrets.ALIYUN_NAME_SPACE }}
+      ALIYUN_REGISTRY_USER: ${{ secrets.ALIYUN_REGISTRY_USER }}
+      ALIYUN_REGISTRY_PASSWORD: ${{ secrets.ALIYUN_REGISTRY_PASSWORD }}
