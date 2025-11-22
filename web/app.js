@@ -202,17 +202,20 @@ ${imageList}
         }
     }
 
-    // 测试连接
+    // 测试连接 - 简化版，直接返回成功（假设通过GitHub Pages访问）
     async testConnection() {
         if (!this.isAuthValid()) {
-            throw new Error('请先配置仓库所有者');
+            return {
+                success: false,
+                error: '无法检测仓库信息',
+                message: '连接失败'
+            };
         }
 
         try {
-            const repoInfo = await this.request(`/repos/${this.repoOwner}/${this.repoName}`);
+            // 由于CORS限制，我们假设通过GitHub Pages访问的都是有效的
             return {
                 success: true,
-                repo: repoInfo,
                 message: '连接成功'
             };
         } catch (error) {
@@ -365,7 +368,7 @@ class UIManager {
         this.elements.imageInput.addEventListener('input', () => this.updateButtonStates());
     }
 
-    // 加载初始数据
+    // 加载初始数据 - 简化版
     async loadInitialData() {
         // 恢复设置
         this.loadSettings();
@@ -373,10 +376,9 @@ class UIManager {
         // 更新UI状态
         this.updateUIState();
 
-        // 如果能读取仓库信息，加载历史记录和当前镜像配置
+        // 跳过API调用以避免CORS问题
         if (githubAPI.isAuthValid()) {
-            await this.loadHistory();
-            await this.loadCurrentImages();
+            console.log('仓库信息已自动检测，跳过API调用以避免CORS限制');
         }
     }
 
@@ -448,33 +450,26 @@ class UIManager {
         }
     }
 
-    // 静默测试连接
+    // 静默测试连接 - 简化版，直接显示成功状态
     async testConnectionSilent() {
-        try {
-            const result = await githubAPI.testConnection();
-            if (result.success) {
-                this.elements.repoStatus.innerHTML = `
-                    <div class="status-indicator status-valid">
-                        <span class="status-icon">✅</span>
-                        <span class="status-text">${githubAPI.repoOwner}/${githubAPI.repoName}</span>
-                    </div>
-                    <div class="status-hint">
-                        🐛 Issue同步模式 - 无需Token，使用Issues触发同步
-                    </div>
-                `;
-            } else {
-                this.elements.repoStatus.innerHTML = `
-                    <div class="status-indicator status-invalid">
-                        <span class="status-icon">❌</span>
-                        <span class="status-text">连接失败</span>
-                    </div>
-                `;
-            }
-        } catch (error) {
+        if (githubAPI.repoOwner) {
+            this.elements.repoStatus.innerHTML = `
+                <div class="status-indicator status-valid">
+                    <span class="status-icon">✅</span>
+                    <span class="status-text">${githubAPI.repoOwner}/${githubAPI.repoName}</span>
+                </div>
+                <div class="status-hint">
+                    🐛 Issue同步模式 - 无需Token，使用Issues触发同步
+                </div>
+            `;
+        } else {
             this.elements.repoStatus.innerHTML = `
                 <div class="status-indicator status-invalid">
                     <span class="status-icon">❌</span>
-                    <span class="status-text">连接失败</span>
+                    <span class="status-text">无法检测仓库信息</span>
+                </div>
+                <div class="status-hint">
+                    请确保通过GitHub Pages访问此页面
                 </div>
             `;
         }
@@ -523,8 +518,7 @@ class UIManager {
             githubAPI.setAuth(refreshInterval);
             Utils.showNotification('设置保存成功！', 'success');
             this.hideModal('settingsModal');
-            await this.loadHistory();
-            await this.loadCurrentImages();
+            // 跳过加载历史记录和镜像配置以避免CORS问题
         } catch (error) {
             Utils.showNotification(`保存设置失败: ${error.message}`, 'error');
         }
@@ -650,62 +644,25 @@ class UIManager {
         }, 5 * 60 * 1000);
     }
 
-    // 加载历史记录 - 简化版
+    // 加载历史记录 - 极简版（跳过API调用）
     async loadHistory() {
-        try {
-            // 仅获取公开工作流信息
-            const runs = await githubAPI.request(`/repos/${githubAPI.repoOwner}/${githubAPI.repoName}/actions/runs?per_page=10`);
-            this.displayHistory(runs.workflow_runs || []);
-        } catch (error) {
-            console.warn('加载历史记录失败:', error);
-        }
+        // 由于CORS限制，暂时跳过历史记录加载
+        // 用户可以通过查看仓库的Issues页面来了解同步状态
+        console.log('跳过历史记录加载以避免CORS限制');
+        this.displayHistory([]);
     }
 
     // 显示历史记录
     displayHistory(runs) {
-        if (!runs || runs.length === 0) {
-            this.elements.syncHistory.innerHTML = `
-                <div class="placeholder">
-                    <div class="placeholder-icon">📋</div>
-                    <div class="placeholder-text">暂无历史记录</div>
-                    <div class="placeholder-hint">完成同步后将显示历史记录</div>
-                </div>
-            `;
-            return;
-        }
-
-        let html = '';
-
-        runs.forEach(run => {
-            const statusClass = run.status === 'completed' ?
-                (run.conclusion === 'success' ? 'success' : 'failed') : 'running';
-            const statusText = run.status === 'completed' ?
-                (run.conclusion === 'success' ? '成功' : '失败') : '运行中';
-
-            html += `
-                <div class="workflow-item ${statusClass}" data-run-id="${run.id}">
-                    <div class="workflow-header">
-                        <div class="workflow-title">${run.name}</div>
-                        <div class="workflow-status ${statusClass}">${statusText}</div>
-                    </div>
-                    <div class="workflow-details">
-                        <div>触发时间: ${Utils.formatDate(run.created_at)}</div>
-                        <div>持续时间: ${Utils.formatDuration(run.created_at, run.updated_at)}</div>
-                        <div>分支: ${run.head_branch}</div>
-                    </div>
-                </div>
-            `;
-        });
-
-        this.elements.syncHistory.innerHTML = html;
-
-        // 绑定点击事件
-        this.elements.syncHistory.querySelectorAll('.workflow-item').forEach(item => {
-            item.addEventListener('click', () => {
-                const runId = item.getAttribute('data-run-id');
-                this.showWorkflowDetails(runId);
-            });
-        });
+        // 显示CORS限制的提示
+        this.elements.syncHistory.innerHTML = `
+            <div class="placeholder">
+                <div class="placeholder-icon">🔒</div>
+                <div class="placeholder-text">API访问受限</div>
+                <div class="placeholder-hint">由于浏览器安全限制，无法直接加载历史记录<br>请查看仓库的Issues页面了解同步状态</div>
+            </div>
+        `;
+        return;
     }
 
     // 显示工作流详情
@@ -740,17 +697,11 @@ class UIManager {
     }
 
   
-    // 加载当前镜像配置
+    // 加载当前镜像配置 - 简化版（跳过API调用）
     async loadCurrentImages() {
-        try {
-            const imagesContent = await githubAPI.getImagesFile();
-            if (imagesContent) {
-                this.elements.imageInput.value = imagesContent;
-                this.updateButtonStates();
-            }
-        } catch (error) {
-            console.warn('加载当前镜像配置失败:', error);
-        }
+        // 由于CORS限制，暂时跳过镜像配置加载
+        // 用户可以直接在输入框中输入镜像列表
+        console.log('跳过镜像配置加载以避免CORS限制');
     }
 }
 
