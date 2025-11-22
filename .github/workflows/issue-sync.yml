@@ -43,8 +43,16 @@ jobs:
         # 提取代码块中的内容
         IMAGES=$(sed -n '/```/,/```/p' issue_body.txt | sed '1d;$d')
 
-        # 过滤出有效的镜像行（排除空行和注释）
-        echo "$IMAGES" | grep -v '^#' | grep -v '^$' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' > issue_images.txt
+        # 过滤出有效的镜像行（排除空行和注释），使用与处理阶段相同的过滤逻辑
+        echo "$IMAGES" | while IFS= read -r line; do
+          # 忽略空行与注释 - 与处理循环中的逻辑完全一致
+          [[ -z "$line" ]] && continue
+          if echo "$line" | grep -q '^\s*#'; then
+            continue
+          fi
+          # 去除首尾空格
+          echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
+        done > issue_images.txt
 
         # 显示提取的镜像和调试信息
         echo "Raw extracted images:"
