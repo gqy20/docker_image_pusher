@@ -91,10 +91,12 @@ jobs:
         # 简化的仓库检测方法
         echo "🔍 使用Docker检测现有镜像..."
 
-        # 临时存储已检测到的镜像
-        EXISTING_IMAGES=""
+        # 使用改进的重名检测逻辑，与同步阶段保持一致
+        echo "🔍 预处理重名镜像分析..."
+        declare -A duplicate_images
+        declare -A temp_map
 
-        # 尝试检测一些已知镜像是否存在
+        # 首先进行重名分析
         while IFS= read -r line || [ -n "$line" ]; do
             # 忽略空行与注释
             [[ -z "$line" ]] && continue
@@ -105,34 +107,84 @@ jobs:
             # 提取镜像信息
             if echo "$line" | grep -q -- '--platform'; then
                 image=$(echo "$line" | awk '{print $NF}')
+                platform=$(echo "$line" | awk -F'--platform[ =]' '{if (NF>1) print $2}' | awk '{print $1}')
             else
                 image="$line"
+                platform=""
             fi
 
             # 将@sha256:等字符删除
             image="${image%%@*}"
 
-            # 获取镜像名:版本号  例如nginx:1.25.3
+            # 获取镜像名:版本号
             image_name_tag=$(echo "$image" | awk -F'/' '{print $NF}')
-
-            # 获取命名空间 例如kasmweb,  这里有种特殊情况 docker.io/nginx，把docker.io当成命名空间，也OK
-            name_space=$(echo "$image" | awk -F'/' '{if (NF==3) print $2; else if (NF==2) print $1; else print ""}')
-
-            # 这里不要是空值影响判断
-            name_space="${name_space}_"
-
-            # 获取镜像名例如nginx
             image_name=$(echo "$image_name_tag" | awk -F':' '{print $1}')
 
-            # 初始化命名空间前缀
+            # 获取命名空间
+            name_space=$(echo "$image" | awk -F'/' '{if (NF==3) print $2; else if (NF==2) print $1; else print ""}')
+
+            # 检测重名镜像
+            if [[ -n "${temp_map[$image_name]}" ]]; then
+                 if [[ "${temp_map[$image_name]}" != "$name_space" ]]; then
+                    echo "🔄 发现重名镜像: $image_name"
+                    duplicate_images[$image_name]="true"
+                 fi
+            else
+                temp_map[$image_name]="$name_space"
+            fi
+        done < images.txt
+
+        # 临时存储已检测到的镜像
+        EXISTING_IMAGES=""
+
+        # 检测镜像是否存在（使用与同步阶段完全一致的逻辑）
+        while IFS= read -r line || [ -n "$line" ]; do
+            # 忽略空行与注释
+            [[ -z "$line" ]] && continue
+            if echo "$line" | grep -q '^\s*#'; then
+                continue
+            fi
+
+            # 提取镜像信息（与同步阶段逻辑一致）
+            if echo "$line" | grep -q -- '--platform'; then
+                image=$(echo "$line" | awk '{print $NF}')
+                platform=$(echo "$line" | awk -F'--platform[ =]' '{if (NF>1) print $2}' | awk '{print $1}')
+            else
+                image="$line"
+                platform=""
+            fi
+
+            # 将@sha256:等字符删除
+            image="${image%%@*}"
+
+            # 获取镜像名:版本号
+            image_name_tag=$(echo "$image" | awk -F'/' '{print $NF}')
+
+            # 获取命名空间
+            name_space=$(echo "$image" | awk -F'/' '{if (NF==3) print $2; else if (NF==2) print $1; else print ""}')
+
+            # 获取镜像名
+            image_name=$(echo "$image_name_tag" | awk -F':' '{print $1}')
+
+            # 生成平台前缀（与同步阶段逻辑一致）
+            platform_prefix=""
+            if [ -n "$platform" ]; then
+                platform_prefix="${platform//\//_}_"
+            fi
+
+            # 处理重名镜像（与同步阶段逻辑一致）
             name_space_prefix=""
+            if [[ -n "${duplicate_images[$image_name]}" ]]; then
+               if [[ -n "$name_space" ]]; then
+                  name_space_prefix="${name_space}_"
+               fi
+            fi
 
-            # 简化重名检测逻辑（后续可增强为调用分析脚本）
-            # 生成最终镜像名，与同步阶段保持一致
-            final_image_name="${name_space_prefix}${image_name_tag}"
-            final_image="$ALIYUN_REGISTRY/$ALIYUN_NAME_SPACE/$final_image_name"
+            # 生成最终镜像名（与同步阶段完全一致）
+            image_name_tag="${image_name_tag%%@*}"
+            final_image="$ALIYUN_REGISTRY/$ALIYUN_NAME_SPACE/${platform_prefix}${name_space_prefix}${image_name_tag}"
 
-            echo "🔍 检测镜像: $final_image"
+            echo "🔍 检测镜像: $final_image (原始: $line)"
 
             # 使用docker manifest检查镜像是否存在
             if docker manifest inspect $final_image >/dev/null 2>&1; then
