@@ -101,9 +101,10 @@ BODY_EOF
     local extracted_images=""
 
     # 提取镜像内容 - 支持代码块和Issue模板格式
-    if echo "$body" | grep -q '```'; then
+    if echo "$body" | grep -qE '```(\w+)?'; then
         # 如果有代码块，提取代码块中的内容
         echo "📝 检测到代码块格式..." >&2
+        # 支持各种代码块格式: ```, ```bash, ```yaml等
         extracted_images=$(sed -n '/```/,/```/p' "$temp_file" | sed '1d;$d')
     else
         # 如果没有代码块，尝试提取Issue模板中的镜像列表
