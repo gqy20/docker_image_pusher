@@ -1,3 +1,0 @@
-nginx:latest
-redis:latest
-alpine:latest

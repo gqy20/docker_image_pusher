@@ -1,3 +1,0 @@
-nginx:alpine
-redis:latest
-hello-world:latest

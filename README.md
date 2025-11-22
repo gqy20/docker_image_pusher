@@ -3,31 +3,45 @@
 [![GitHub stars](https://img.shields.io/github/stars/gqy20/docker_image_pusher?style=social)](https://github.com/gqy20/docker_image_pusher/stargazers)
 [![GitHub forks](https://img.shields.io/github/forks/gqy20/docker_image_pusher?style=social)](https://github.com/gqy20/docker_image_pusher/network)
 [![GitHub license](https://img.shields.io/github/license/gqy20/docker_image_pusher)](https://github.com/gqy20/docker_image_pusher/blob/main/LICENSE)
+[![GitHub Actions](https://img.shields.io/github/actions/workflow/status/gqy20/docker_image_pusher/docker.yaml?branch=main)](https://github.com/gqy20/docker_image_pusher/actions)
 
-> 使用 GitHub Action 将国外的 Docker 镜像转存到阿里云私有仓库，供国内服务器使用，免费易用
+> 🚀 **企业级Docker镜像同步工具** - 使用 GitHub Actions 将国外Docker镜像智能转存到阿里云私有仓库，支持多种触发方式、智能重名处理、多架构同步，免费易用
 
-**原作作者：[技术爬爬虾](https://github.com/tech-shrimp/me)** | Fork 自原作并进行优化改进
+**原作作者：[技术爬爬虾](https://github.com/tech-shrimp/me)** | Fork 自原作并进行企业级优化改进
 
-## ✨ 特性
+## ✨ 核心特性
 
-- 🚀 **多仓库支持** - 支持 DockerHub、gcr.io、k8s.io、ghcr.io 等任意仓库
-- 📦 **大镜像支持** - 支持最大 40GB 的大型镜像
-- ⚡ **高速传输** - 使用阿里云官方线路，速度快
-- 🏗️ **多架构支持** - 支持 AMD64、ARM64 等多种架构
-- 🔄 **自动化同步** - 支持定时自动同步更新
-- 📝 **智能重名处理** - 自动处理镜像重名情况
-- 🎯 **零成本使用** - 完全免费，无需服务器
-- 🌐 **Web管理界面** - 提供直观的Web界面进行镜像管理和状态监控
-- 🎛️ **可视化操作** - 通过浏览器轻松触发工作流、查看镜像状态
-- 📊 **实时监控** - 实时显示同步进度和执行状态
+### 🔄 **多样化触发方式**
+- **📝 Issue触发** - 通过GitHub Issue快速提交同步请求
+- **🤖 自动同步** - 每日定时智能检查和同步
+- **⚡ 手动触发** - GitHub Actions页面一键执行
+- **📂 文件变更** - 修改images.txt自动触发同步
+
+### 🧠 **智能同步机制**
+- **🎯 增量同步** - 只同步缺失镜像，避免重复传输
+- **🔍 存在性检测** - 自动检测目标仓库镜像状态
+- **🏷️ 重名处理** - 智能处理同名镜像，添加命名空间前缀
+- **📊 详细报告** - 实时显示同步进度和结果统计
+
+### 🏗️ **企业级功能**
+- **📦 多仓库支持** - DockerHub、gcr.io、k8s.io、ghcr.io等任意仓库
+- **💾 大镜像支持** - 支持最大40GB的大型镜像
+- **🌐 多架构支持** - AMD64、ARM64等多种架构同步
+- **⚙️ 高级配置** - 强制同步、干运行、批量处理
+
+### 🎛️ **Web管理界面**
+- **🖥️ 可视化操作** - 直观的Web界面管理镜像同步
+- **📱 响应式设计** - 完美适配桌面和移动设备
+- **🔄 实时监控** - 实时显示同步状态和进度
+- **📜 历史记录** - 查看所有同步任务的详细记录
 
 ## 📺 视频教程
 
-[B站视频教程](https://www.bilibili.com/video/BV1Zn4y19743/)
+[![B站视频教程](https://img.shields.io/badge/B站-视频教程-FF69B4?style=flat-square&logo=bilibili)](https://www.bilibili.com/video/BV1Zn4y19743/)
 
 ## 🌐 Web管理界面
 
-项目现在提供了直观的Web管理界面，让您能够通过浏览器轻松管理Docker镜像同步：
+项目提供了直观的Web管理界面，让您能够通过浏览器轻松管理Docker镜像同步：
 
 ### 🔗 访问地址
 - **GitHub Pages**: `https://[你的用户名].github.io/docker_image_pusher/`
@@ -52,46 +66,6 @@
 5. **选择选项** - 可选择强制更新或仅检测模式
 6. **开始同步** - 点击"开始同步"按钮触发工作流
 7. **监控进度** - 实时查看同步状态和执行结果
-
-### 🔑 GitHub Token配置
-
-1. 访问 [GitHub Token设置](https://github.com/settings/tokens/new)
-2. 创建新的Personal Access Token，需要以下权限：
-   - `repo` - 访问仓库
-   - `workflow` - 触发工作流
-3. 复制生成的Token（仅显示一次）
-4. 在Web界面设置中填入Token
-
-### 📋 支持的镜像格式
-
-```bash
-# 基本格式
-nginx
-nginx:1.21-alpine
-
-# 指定架构
-nginx --platform=linux/arm64
-
-# 不同仓库
-k8s.gcr.io/kube-state-metrics/kube-state-metrics:v1.9.0
-ghcr.io/actions/runner:latest
-
-# 批量格式
-nginx:latest
-redis:7.0
-ubuntu:22.04
---platform=linux/arm64 node:18
-```
-
-## 📖 目录
-
-- [Web管理界面](#-web管理界面)
-- [快速开始](#-快速开始)
-- [详细配置](#-详细配置)
-- [使用说明](#-使用说明)
-- [高级功能](#-高级功能)
-- [常见问题](#-常见问题)
-- [贡献指南](#-贡献指南)
 
 ## 🚀 快速开始
 
@@ -118,148 +92,263 @@ ubuntu:22.04
 | `ALIYUN_REGISTRY_USER` | 阿里云用户名 |
 | `ALIYUN_REGISTRY_PASSWORD` | 阿里云密码 |
 
-### 3. 添加镜像
+### 3. 多种同步方式选择
 
-编辑 `images.txt` 文件，每行一个镜像：
+#### 🎯 方式一：Issue触发同步（推荐）
 
-```bash
-# 基本格式
-nginx
-nginx:1.21-alpine
-# 指定架构
-nginx --platform=linux/arm64
-# 不同仓库
-k8s.gcr.io/kube-state-metrics/kube-state-metrics:v1.9.0
+1. 在仓库中创建新Issue
+2. 使用 "Docker镜像同步" 模板
+3. 填写镜像列表，支持格式：
+   ```bash
+   nginx:latest
+   redis:7.0
+   ubuntu:22.04
+   --platform=linux/arm64 node:18
+   k8s.gcr.io/pause:3.9
+   ```
+4. 添加 `sync` 标签
+5. 自动触发智能同步，结果会显示在Issue中
+
+#### 📂 方式二：配置文件同步
+
+1. 创建 `images.txt` 文件
+2. 每行一个镜像：
+   ```bash
+   # 基本格式
+   nginx
+   nginx:1.21-alpine
+   # 指定架构
+   nginx --platform=linux/arm64
+   # 不同仓库
+   k8s.gcr.io/kube-state-metrics/kube-state-metrics:v1.9.0
+   ghcr.io/actions/runner:latest
+   ```
+3. 提交文件，自动触发智能同步
+
+#### ⚡ 方式三：手动触发
+
+1. 进入 GitHub Actions 页面
+2. 选择 "Manual Docker Image Sync" 工作流
+3. 点击 "Run workflow"
+4. 输入镜像列表（逗号分隔）
+5. 选择是否强制更新和干运行模式
+
+## 📋 同步方式对比
+
+| 方式 | 触发条件 | 适用场景 | 优势 | 特点 |
+|------|----------|----------|------|------|
+| 🎯 Issue触发 | 创建带sync标签的Issue | 临时、少量镜像 | 界面友好，自动反馈 | 自动关闭Issue |
+| 📂 配置文件 | 修改images.txt | 批量、固定镜像 | 版本控制，批量处理 | 智能检测变化 |
+| ⚡ 手动触发 | GitHub Actions页面 | 临时、多样化需求 | 灵活配置，多种选项 | 支持干运行 |
+| 🤖 定时同步 | 每日自动执行 | :latest镜像更新 | 自动维护最新版本 | 仅更新latest标签 |
+
+## 🔧 高级功能
+
+### 🎯 Issue触发同步详解
+
+Issue触发是最便捷的同步方式，具有以下特点：
+
+- **📝 标准化模板** - 使用预定义Issue模板，格式规范
+- **🏷️ 智能识别** - 自动识别带有 `sync` 标签的Issue
+- **🔍 格式验证** - 自动验证镜像格式，支持多种仓库
+- **📊 实时反馈** - 同步进度和结果实时显示在Issue中
+- **✅ 自动关闭** - 全部成功后自动关闭Issue
+- **🚀 智能跳过** - 自动检测已存在镜像，避免重复同步
+
+**Issue格式示例：**
+```markdown
+### 📦 镜像列表
+
+```
+nginx:latest
+redis:7.0
+ubuntu:22.04
+--platform=linux/arm64 node:18
+k8s.gcr.io/coredns/coredns:v1.10.1
 ghcr.io/actions/runner:latest
 ```
 
-### 4. 启动同步
+### 🏷️ 智能重名处理
 
-提交 `images.txt` 文件，GitHub Action 将自动开始智能同步。
-
-## 📝 使用说明
-
-### images.txt 文件格式
+系统自动检测并智能处理重名镜像：
 
 ```bash
-# 注释行以 # 开头
-nginx                                    # 默认使用 latest 标签
-nginx:1.21-alpine                        # 指定标签
-nginx --platform=linux/arm64             # 指定架构
-k8s.gcr.io/kube-state-metrics/kube-state-metrics:v2.0.0  # k8s 镜像
-ghcr.io/actions/runner:latest             # GitHub Container Registry
+# 重名镜像示例
+xhofe/alist           # 同步为 xhofe_alist
+xiaoyaliu/alist       # 同步为 xiaoyaliu_alist
+nginx/nginx            # 同步为 nginx_nginx
 ```
 
-### 拉取镜像
+**重名检测逻辑：**
+- 自动提取镜像基本名称（去除仓库前缀和标签）
+- 检测是否存在重名情况
+- 为重名镜像添加原始命名空间前缀
+- 确保目标仓库中的镜像名称唯一性
 
-同步完成后，在国内服务器上拉取镜像：
+### 🏗️ 多架构支持
+
+支持多种CPU架构的镜像同步：
 
 ```bash
-docker pull registry.cn-hangzhou.aliyuncs.com/你的命名空间/镜像名:标签
+# 单架构同步
+--platform=linux/amd64 ubuntu:22.04
+--platform=linux/arm64 ubuntu:22.04
+
+# 多架构同步（同一镜像不同架构）
+--platform=linux/amd64 node:18
+--platform=linux/arm64 node:18
+--platform=linux/arm64/v8 node:18
+
+# 常用架构类型
+linux/amd64     # x86_64架构
+linux/arm64     # ARM64架构
+linux/arm64/v8  # ARM64 v8架构
+linux/386       # x86 32位架构
 ```
 
-示例：
-```bash
-docker pull registry.cn-hangzhou.aliyuncs.com/my-namespace/nginx:latest
+**多架构命名规则：**
 ```
-
-### 多架构支持
-
-在 `images.txt` 中使用 `--platform` 参数指定镜像架构：
-
-```bash
-# 单架构示例
---platform=linux/arm64 nginx
-
-# 多架构示例（同一镜像的不同架构）
---platform=linux/amd64 ubuntu
---platform=linux/arm64 ubuntu
-
-# 其他常用架构
---platform=linux/arm64/v8 node
---platform=linux/386 alpine
-```
-
-**命名规则：** 指定架构后，架构名称会以前缀形式添加到镜像名前面，如：
-```
+registry.cn-hangzhou.aliyuncs.com/namespace/linux_amd64_nginx:latest
 registry.cn-hangzhou.aliyuncs.com/namespace/linux_arm64_nginx:latest
 ```
 
-### 镜像重名处理
+### 🧠 智能同步机制
 
-程序会自动检测重名镜像并智能处理：
+采用**增量同步**策略，只同步缺失的镜像：
 
-```bash
-# 如果有重名镜像，会自动添加命名空间前缀
-xhofe/alist           # 同步为 xhofe_alist
-xiaoyaliu/alist       # 同步为 xiaoyaliu_alist
-```
-
-<img src="doc/镜像重名.png" alt="镜像重名处理示例" width="600"/>
-
-### 智能同步机制
-
-系统采用**智能仓库对比**策略，只同步缺失的镜像，避免重复传输：
-
-**🔄 触发方式：**
-- **手动触发**: GitHub Actions页面可手动执行
-- **配置变更**: 修改`images.txt`时自动触发
-- **定时检查**: 每天北京时间上午8点自动检查
-- **强制同步**: 支持强制同步所有镜像选项
-
-**⚡ 同步逻辑：**
 ```mermaid
 graph LR
-    A[读取images.txt] --> B[查询阿里云仓库]
-    B --> C[智能对比分析]
+    A[读取镜像列表] --> B[检测目标仓库状态]
+    B --> C[对比分析]
     C --> D{镜像是否存在?}
     D -->|不存在| E[标记需要同步]
-    D -->|已存在| F[跳过处理]
-    E --> G[增量同步]
-    F --> H[完成]
+    D -->|已存在| F[智能跳过]
+    E --> G[执行同步操作]
+    F --> H[生成统计报告]
+    G --> H
+    H --> I[发送通知]
 ```
 
-**🎯 核心特性：**
-- 只同步缺失的镜像，已存在镜像自动跳过
-- 支持多架构、重名镜像的智能处理
-- 自动生成同步统计报告
+**核心特性：**
+- ✅ **智能跳过** - 已存在镜像自动跳过，节省时间和带宽
+- ✅ **增量同步** - 只处理新增或变更的镜像
+- ✅ **详细统计** - 提供总数、成功、跳过、失败的详细统计
+- ✅ **错误处理** - 完善的错误处理和重试机制
 
-### 定时更新说明
+### ⚙️ 手动触发高级选项
 
-**⏰ 自动更新时间：** 每周一北京时间上午6点
+手动触发模式提供丰富的配置选项：
 
-**📋 更新规则：**
-- ✅ **无版本标签镜像**（如 `nginx`）→ 自动更新到最新版本
-- ✅ **:latest 镜像** → 覆盖更新到最新版本
-- ❌ **指定版本镜像**（如 `postgres:15-alpine`）→ 保持不变
+- **镜像列表** - 支持逗号分隔的批量输入
+- **强制更新** - 强制覆盖已存在的镜像
+- **干运行模式** - 仅检测镜像状态，不实际同步
+- **批量处理** - 一次性处理多个镜像
 
-**📍 更新机制：**
-- 采用**覆盖更新**模式，不创建新的版本标签
-- 只更新现有标签的内容，如 `nginx:latest` 从1.20更新到1.21
-- 多架构镜像同样支持自动更新
+**使用场景：**
+- 🆕 **新增镜像** - 批量添加新的镜像到仓库
+- 🔄 **强制更新** - 忽略缓存，强制重新同步
+- 🔍 **状态检查** - 干运行模式检查镜像状态
+- 🚨 **故障恢复** - 重新同步失败的镜像
 
-### 自定义定时同步
+## 🤖 GitHub Actions 工作流
 
-如需修改定时同步时间，编辑 `.github/workflows/docker.yaml` 文件中的 `schedule` 配置：
+项目包含多个专业化的工作流：
 
-```yaml
-schedule:
-  # 每天 UTC 时间 01:00 执行（北京时间上午9点）
-  - cron: '0 1 * * *'
+### 1. docker.yaml - 主同步工作流
+- **触发方式**：推送、定时、手动
+- **智能同步**：只同步缺失镜像
+- **定时检查**：每日北京时间上午8点
+- **强制选项**：支持强制同步所有镜像
+
+### 2. issue-sync.yml - Issue触发工作流
+- **触发方式**：创建带sync标签的Issue
+- **格式支持**：代码块和模板格式
+- **智能提取**：自动提取Issue中的镜像列表
+- **自动回复**：同步结果自动回复到Issue
+
+### 3. manual-sync.yml - 手动同步工作流
+- **触发方式**：GitHub Actions手动触发
+- **批量输入**：支持逗号分隔的镜像列表
+- **高级选项**：强制更新、干运行模式
+- **实时反馈**：详细的执行日志和统计
+
+### 4. update-latest.yml - Latest更新工作流
+- **触发方式**：定时（每周一）+ 手动
+- **更新范围**：仅更新latest标签镜像
+- **安全策略**：保持指定版本镜像不变
+- **自动化**：自动维护最新版本
+
+### 5. deploy-pages.yml - Web界面部署
+- **触发方式**：推送web目录时
+- **自动部署**：GitHub Pages自动部署
+- **实时更新**：界面功能实时同步
+
+## 📖 使用指南
+
+### 📦 支持的镜像格式
+
+```bash
+# 基本格式
+nginx                    # 默认latest标签
+nginx:1.21-alpine        # 指定标签
+
+# 架构指定
+nginx --platform=linux/arm64              # 单架构
+node:18 --platform=linux/amd64            # AMD64架构
+ubuntu --platform=linux/arm64/v8          # ARM64 v8架构
+
+# 不同仓库
+docker.io/library/nginx:latest             # Docker Hub
+k8s.gcr.io/pause:3.9                      # Kubernetes镜像
+ghcr.io/actions/runner:latest              # GitHub Container Registry
+quay.io/prometheus/prometheus:latest       # Quay.io镜像
+
+# 复杂格式示例
+gcr.io/kaniko-project/executor:latest      # Google Container Registry
+mcr.microsoft.com/dotnet/sdk:6.0           # Microsoft Container Registry
 ```
 
-**常用 cron 表达式：**
-- `0 2 * * *` - 每天北京时间上午10点
-- `0 2 * * 1` - 每周一北京时间上午10点
-- `*/30 * * * *` - 每30分钟
+### 🔄 镜像拉取示例
 
-<img src="doc/定时执行.png" alt="定时执行配置" width="600"/>
+同步完成后，在国内服务器拉取镜像：
 
-### 镜像状态查看
+```bash
+# 基本拉取
+docker pull registry.cn-hangzhou.aliyuncs.com/你的命名空间/nginx:latest
 
-回到阿里云镜像仓库，可以查看镜像同步状态。可以将镜像设为公开，实现免登录拉取。
+# 多架构镜像拉取
+docker pull registry.cn-hangzhou.aliyuncs.com/你的命名空间/linux_arm64_nginx:latest
 
-<img src="doc/开始使用.png" alt="镜像状态查看" width="600"/>
+# 重名镜像拉取
+docker pull registry.cn-hangzhou.aliyuncs.com/你的命名空间/xhofe_alist:latest
+```
+
+### 📊 同步状态监控
+
+同步完成后，可通过以下方式查看状态：
+
+1. **GitHub Actions日志** - 详细的执行日志和错误信息
+2. **Issue回复** - Issue触发模式的详细报告
+3. **阿里云控制台** - 目标仓库的镜像列表
+4. **Web界面** - 实时状态和历史记录
+
+### 🔧 故障排查
+
+**常见问题及解决方案：**
+
+```bash
+# 1. 配置错误
+invalid reference format           # 检查ALIYUN_NAME_SPACE是否为空
+denied: requested access          # 检查阿里云用户名密码是否正确
+
+# 2. 镜像问题
+Error processing tar file          # 镜像损坏或网络问题
+manifest unknown                  # 镜像不存在或标签错误
+
+# 3. 权限问题
+permission denied while trying to connect # Docker权限问题
+no space left on device           # 磁盘空间不足
+```
 
 ## 🌍 多云支持
 
@@ -297,109 +386,118 @@ schedule:
 - UCloud提供教职人员和在校学生学术优惠（¥499）
 - 需提供校园网站信息页截图或教师资格证进行认证
 
+### 推荐配置
+
+**🎯 个人用户推荐：**
+- **阿里云ACR** - 速度最快，个人版免费额度优厚
+- **腾讯云TCR** - 功能丰富，API接口完善
+
+**🏢 企业用户推荐：**
+- **华为云SWR** - 安全性最强，仓库数量无限制
+- **阿里云ACR企业版** - 企业级功能完善
 
 ## ❓ 常见问题
 
-### 🔧 配置与故障排查
+### 🔧 配置相关问题
 
-**Q: 同步失败了怎么办？**
-A: 检查以下几点：
-1. 确认阿里云配置正确（`ALIYUN_NAME_SPACE` 不能为空）
-2. 检查源镜像是否存在
-3. 确认镜像大小不超过40GB限制
-4. 查看 GitHub Action 日志获取详细错误信息
-
-**常见错误：**
-- `invalid reference format`: `ALIYUN_NAME_SPACE` 配置为空
-- `denied: requested access to the resource is denied`: 用户名或密码错误
-- `Error processing tar file`: 镜像损坏或网络问题
-
-**Q: 同步速度很慢怎么办？**
-A: 同步速度受源镜像位置、镜像大小、网络状况影响，建议在网络较好的时间段同步。
-
-### 📦 镜像管理
-
-**Q: 可以同时同步多个镜像吗？**
-A: 可以，在 `images.txt` 中每行一个镜像即可，系统会并行处理。
-
-**Q: 如何删除已同步的镜像？**
-A: 登录阿里云容器镜像服务，手动删除不需要的镜像。
+**Q: 如何配置多个命名空间？**
+A: 目前不支持，但可以Fork多个项目分别配置不同命名空间。
 
 **Q: 支持私有镜像同步吗？**
-A: 目前不支持私有镜像，仅支持公共镜像仓库。
+A: 目前仅支持公共镜像仓库，私有镜像需要额外认证。
 
-### 🔄 智能同步机制
+**Q: 同步速度慢怎么办？**
+A: 可尝试在网络较好时段同步，或检查源镜像的CDN节点。
 
-**Q: 每次修改images.txt都会同步所有镜像吗？**
-A: 不会！系统采用**智能增量同步**：
-- 只有 `images.txt` 变化时才触发同步
-- 只处理新增或修改的镜像
-- 已存在的镜像不会重复拉取，节省时间和带宽
+### 🚀 功能相关问题
 
-**Q: 智能同步会更新已存在的镜像吗？**
-A: 当前版本主要处理：
-- ✅ **缺失镜像**: 自动检测并同步
-- ✅ **新增配置**: 发现新配置后立即同步
-- ⏳ **版本更新**: 未来版本将支持版本检测
+**Q: Issue触发和文件触发的区别？**
+A: Issue触发适合临时少量同步，文件触发适合批量固定镜像管理。
 
 **Q: 如何强制同步所有镜像？**
-A: 在 GitHub Actions 页面手动触发，选择 "Force sync: true" 选项
+A: 手动触发时选择"force_sync: true"选项。
 
-### ⏰ 定时更新
+**Q: 智能同步会更新已存在镜像吗？**
+A: 默认跳过已存在镜像，如需更新请使用强制同步。
 
-**Q: 定时更新会影响我指定的版本吗？**
-A: 不会。只处理无版本标签（如 `nginx`）和 `:latest` 的镜像。具体版本（如 `postgres:15-alpine`）保持不变。
+**Q: 支持哪些Docker镜像仓库？**
+A: 支持所有公共镜像仓库：Docker Hub、GCR、GHCR、Quay等。
 
-**Q: 定时更新后会有多个镜像版本吗？**
-A: 不会。采用**覆盖更新**模式，只更新现有标签内容。如需保留特定版本，请手动指定版本号。
+### 📊 监控和报告
 
-**Q: 更新后正在使用的服务会受影响吗？**
-A: 使用 `:latest` 标签的服务在重新拉取时会获取新版本。生产环境建议指定具体版本号。
+**Q: 如何查看同步历史？**
+A: 通过Web界面的历史记录或GitHub Actions日志。
 
-### 🛠️ 系统功能
+**Q: 同步失败如何重试？**
+A: 失败的镜像可在下次同步时自动重试，或手动强制同步。
 
-**Q: 如何手动触发镜像更新？**
-A: 在 GitHub Actions 页面手动触发工作流，或编辑 `images.txt` 文件触发更新。
+**Q: 如何获取同步统计？**
+A: 同步完成后会生成详细统计报告，包含成功/失败/跳过数量。
 
 ## 🤝 贡献指南
 
-欢迎提交 Issue 和 Pull Request！
+我们欢迎社区贡献！请遵循以下指南：
 
-### 提交 Issue
-- 使用清晰描述标题
-- 提供详细的错误信息和复现步骤
-- 附上相关日志信息
+### 🐛 提交问题
+- 使用清晰的标题描述问题
+- 提供详细的复现步骤和环境信息
+- 附上相关的日志和截图
+- 检查是否为重复问题
 
-### 提交 Pull Request
-- Fork 本项目
-- 创建特性分支 (`git checkout -b feature/AmazingFeature`)
-- 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-- 推送到分支 (`git push origin feature/AmazingFeature`)
-- 创建 Pull Request
+### 💡 功能建议
+- 描述新功能的用途和场景
+- 说明实现思路和预期效果
+- 考虑向后兼容性
+
+### 🔧 代码贡献
+1. Fork 项目到你的账户
+2. 创建功能分支：`git checkout -b feature/amazing-feature`
+3. 提交更改：`git commit -m 'Add amazing feature'`
+4. 推送分支：`git push origin feature/amazing-feature`
+5. 创建 Pull Request
+
+### 📝 代码规范
+- 遵循现有代码风格
+- 添加必要的注释和文档
+- 确保所有测试通过
+- 更新相关文档
 
 ## 📄 许可证
 
-本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
+本项目采用 [MIT 许可证](LICENSE) - 允许自由使用、修改和分发。
 
 ## 🙏 致谢
 
 **原作作者：[技术爬爬虾](https://github.com/tech-shrimp/me)**
 
-B站、抖音、YouTube 全网同名，转载请注明原作者
+感谢原作者提供的基础项目，我们在其基础上进行了大量优化和功能增强：
 
+### 🚀 主要改进
+- **智能同步机制** - 增量同步，避免重复传输
+- **Issue触发模式** - 更便捷的同步方式
+- **多架构支持** - 完善的多平台架构同步
+- **Web管理界面** - 可视化操作界面
+- **高级工作流** - 多样化的触发和配置选项
+- **重名处理** - 智能处理同名镜像冲突
+- **详细统计** - 完善的同步报告和监控
+
+### 📺 原作者信息
 - 📺 [B站视频教程](https://www.bilibili.com/video/BV1Zn4y19743/)
 - 🐛 [原作者 GitHub](https://github.com/tech-shrimp/me)
-- 🌟 [给原作者项目点 Star](https://github.com/tech-shrimp/docker-image-pusher)
+- 🌟 [原作项目](https://github.com/tech-shrimp/docker-image-pusher)
 
-### 支持作者
+### 🌟 支持我们
 
-如果这个项目对你有帮助，请给个 ⭐ Star 支持一下！
+如果这个项目对你有帮助，请：
+- 给个 ⭐ Star 支持一下
+- 分享给有需要的朋友
+- 提交 Issue 和 PR 参与改进
 
 ## 📞 联系方式
 
-- GitHub Issues: [提交问题](https://github.com/gqy20/docker_image_pusher/issues)
-- 原作者 B站: [@技术爬爬虾](https://www.bilibili.com/video/BV1Zn4y19743/)
+- **GitHub Issues**: [提交问题](https://github.com/gqy20/docker_image_pusher/issues)
+- **原作B站**: [@技术爬爬虾](https://www.bilibili.com/video/BV1Zn4y19743/)
 
 ---
 
-**⚠️ 重要声明**：本项目基于 [技术爬爬虾](https://github.com/tech-shrimp/me) 的原作进行 Fork 和优化，版权归原作者所有。
+**⚠️ 重要声明**：本项目基于 [技术爬爬虾](https://github.com/tech-shrimp/me) 的原作进行 Fork 和优化改进，版权归原作者所有。本项目遵循 MIT 许可证开源，供学习和商业使用。
