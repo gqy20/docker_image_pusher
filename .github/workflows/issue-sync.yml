@@ -40,8 +40,14 @@ jobs:
         ${{ github.event.issue.body }}
         BODY_EOF
 
-        # 提取代码块中的内容
-        IMAGES=$(sed -n '/```/,/```/p' issue_body.txt | sed '1d;$d')
+        # 提取镜像内容 - 支持代码块和Issue模板格式
+        if echo "${{ github.event.issue.body }}" | grep -q '```'; then
+          # 如果有代码块，提取代码块中的内容
+          IMAGES=$(sed -n '/```/,/```/p' issue_body.txt | sed '1d;$d')
+        else
+          # 如果没有代码块，尝试提取Issue模板中的镜像列表
+          IMAGES=$(sed -n '/### 📦 镜像列表/,/^### /p' issue_body.txt | sed '1d;$d')
+        fi
 
         # 过滤出有效的镜像行（排除空行和注释），使用与处理阶段相同的过滤逻辑
         echo "$IMAGES" | while IFS= read -r line; do

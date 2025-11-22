@@ -1,0 +1,27 @@
+## 🐳 Docker 镜像同步请求
+请在下方填写需要同步的镜像列表，格式与 `images.txt` 文件相同。
+
+### 📦 镜像列表
+nginx:alpine
+redis:latest
+# 注释行
+  # 带空格的注释
+ubuntu:22.04
+--platform=linux/arm64 node:18
+hello-world:latest
+
+# 另一个注释
+busybox:latest
+
+---
+
+### 📋 说明
+- 此请求将触发 GitHub Actions 自动同步镜像
+- 同步进度和结果将在此 Issue 中显示
+- 全部成功后 Issue 会自动关闭
+- 支持的格式与项目根目录 `images.txt` 完全相同
+
+### ⚠️ 注意事项
+- 请确保镜像格式正确
+- 支持多平台架构同步
+- 同步过程可能需要较长时间，请耐心等待
