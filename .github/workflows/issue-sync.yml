@@ -77,18 +77,19 @@ jobs:
         # 保存结果用于评论 - 确保计数一致
         echo "TOTAL_COUNT=$TOTAL_COUNT" >> $GITHUB_ENV
         echo "SUCCESS_COUNT=$SUCCESS_COUNT" >> $GITHUB_ENV
+        echo "SKIPPED_COUNT=$SKIPPED_COUNT" >> $GITHUB_ENV
 
         # 保存成功和失败的镜像列表
         echo "SUCCESS_IMAGES<<EOF" >> $GITHUB_ENV
-        cat success_images.txt >> $GITHUB_ENV
+        echo "$SUCCESS_IMAGES" >> $GITHUB_ENV
         echo "EOF" >> $GITHUB_ENV
 
         echo "FAILED_IMAGES<<EOF" >> $GITHUB_ENV
-        cat failed_images.txt >> $GITHUB_ENV
+        echo "$FAILED_IMAGES" >> $GITHUB_ENV
         echo "EOF" >> $GITHUB_ENV
 
         # 清理临时文件
-        rm -f extract-result.env sync-result.env extracted_images.txt success_images.txt failed_images.txt
+        rm -f extract-result.env sync-result.env extracted_images.txt
 
     - name: Add final comment
       if: always()

@@ -320,8 +320,8 @@ smart_sync_images() {
         echo "EOF" >> "$OUTPUT_ENV_FILE"
     fi
 
-    # 清理临时文件
-    rm -f "$temp_sync_file" sync-result.env success_images.txt failed_images.txt
+    # 清理临时文件（但保留sync-result.env供外部使用）
+    rm -f "$temp_sync_file" success_images.txt failed_images.txt
 }
 
 # 核心镜像同步函数
