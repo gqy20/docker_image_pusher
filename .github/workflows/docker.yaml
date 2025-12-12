@@ -30,6 +30,11 @@ jobs:
   build:
     name: Pull
     runs-on: ubuntu-latest
+    env:
+      ALIYUN_REGISTRY: ${{ secrets.ALIYUN_REGISTRY }}
+      ALIYUN_NAME_SPACE: ${{ secrets.ALIYUN_NAME_SPACE }}
+      ALIYUN_REGISTRY_USER: ${{ secrets.ALIYUN_REGISTRY_USER }}
+      ALIYUN_REGISTRY_PASSWORD: ${{ secrets.ALIYUN_REGISTRY_PASSWORD }}
     steps:
     - name: Before freeing up disk space
       run: |
@@ -91,13 +96,57 @@ jobs:
         # 简化的仓库检测方法
         echo "🔍 使用Docker检测现有镜像..."
 
-        # 使用改进的重名检测逻辑，与同步阶段保持一致
-        echo "🔍 预处理重名镜像分析..."
-        declare -A duplicate_images
-        declare -A temp_map
+        # 检测配置格式并选择处理方式
+        if [ -f "images.json" ]; then
+            echo "📋 检测到JSON格式配置文件 (images.json)"
+            echo "🚀 使用JSON格式进行智能同步..."
 
-        # 首先进行重名分析
-        while IFS= read -r line || [ -n "$line" ]; do
+            # 使用JSON包装脚本进行同步
+            if [[ "${{ github.event.inputs.force_sync }}" == "true" ]]; then
+                echo "⚡ 强制同步模式：同步所有镜像"
+                ./scripts/json_sync_wrapper.sh -f -o sync-result.env
+            else
+                echo "🔍 智能同步模式：仅同步需要的镜像"
+                ./scripts/json_sync_wrapper.sh -s -o sync-result.env
+            fi
+
+            # 读取结果
+            if [ -f sync-result.env ]; then
+                source sync-result.env
+                echo "📊 JSON同步结果:"
+                echo "  📋 处理总数: $TOTAL_COUNT 个镜像"
+                echo "  ✅ 同步成功: $SUCCESS_COUNT 个镜像"
+                echo "  ❌ 同步失败: $FAILED_COUNT 个镜像"
+
+                # 显示成功和失败的镜像详情
+                if [ "$SUCCESS_COUNT" -gt 0 ]; then
+                    echo "🎉 成功同步的镜像:"
+                    echo "$SUCCESS_IMAGES" | grep "^✅" || echo "  详情请查看日志"
+                fi
+
+                if [ "$FAILED_COUNT" -gt 0 ]; then
+                    echo "⚠️ 同步失败的镜像:"
+                    echo "$FAILED_IMAGES" | grep "^❌" || echo "  详情请查看日志"
+                fi
+            else
+                echo "❌ 未找到JSON同步结果文件"
+                exit 1
+            fi
+
+            # 跳过后续的文本格式处理
+            echo "⏭️  跳过文本格式处理，直接进入结果提交阶段"
+            # 设置变量以避免后续步骤失败
+            NEEDED_COUNT=${SUCCESS_COUNT:-0}
+
+        elif [ -f "images.txt" ]; then
+            echo "📋 使用文本格式配置文件 (images.txt)"
+            # 使用改进的重名检测逻辑，与同步阶段保持一致
+            echo "🔍 预处理重名镜像分析..."
+            declare -A duplicate_images
+            declare -A temp_map
+
+            # 首先进行重名分析
+            while IFS= read -r line || [ -n "$line" ]; do
             # 忽略空行与注释
             [[ -z "$line" ]] && continue
             if echo "$line" | grep -q '^\s*#'; then
@@ -273,8 +322,8 @@ jobs:
         fi
 
         # 创建临时文件只包含需要同步的镜像
-        # 确保文件末尾没有多余的空行
-        echo -n "$NEEDED_IMAGES" > temp_images.txt
+        # 使用printf确保每行都有正确的换行符，符合标准文本文件格式
+        printf "%s\n" "$NEEDED_IMAGES" > temp_images.txt
 
         echo "🚀 开始同步缺失的镜像..."
 
@@ -297,8 +346,8 @@ jobs:
         echo "  ❌ 失败数量: $((TOTAL_COUNT - ${SUCCESS_COUNT:-0})) 个镜像"
         echo "=============================================================================="
 
-    env:
-      ALIYUN_REGISTRY: ${{ secrets.ALIYUN_REGISTRY }}
-      ALIYUN_NAME_SPACE: ${{ secrets.ALIYUN_NAME_SPACE }}
-      ALIYUN_REGISTRY_USER: ${{ secrets.ALIYUN_REGISTRY_USER }}
-      ALIYUN_REGISTRY_PASSWORD: ${{ secrets.ALIYUN_REGISTRY_PASSWORD }}
+        else
+            echo "❌ 未找到配置文件 (images.json 或 images.txt)"
+            echo "请至少创建一个配置文件来定义需要同步的镜像"
+            exit 1
+        fi

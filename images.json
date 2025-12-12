@@ -1,0 +1,94 @@
+{
+  "version": "1.0",
+  "metadata": {
+    "description": "从images.txt迁移的JSON配置",
+    "created": "2025-12-12T18:06:59.448356",
+    "migrated_from": "images.txt"
+  },
+  "images": [
+    {
+      "id": "migrated-001",
+      "description": "从images.txt第1行迁移",
+      "source": {
+        "repository": "nginx",
+        "tag": "latest"
+      },
+      "options": {
+        "platform": null,
+        "private_registry": false,
+        "skip_existing": true,
+        "priority": 1
+      }
+    },
+    {
+      "id": "migrated-003",
+      "description": "从images.txt第3行迁移",
+      "source": {
+        "repository": "k8s.gcr.io/kube-state-metrics/kube-state-metrics",
+        "tag": "v2.0.0"
+      },
+      "options": {
+        "platform": null,
+        "private_registry": true,
+        "skip_existing": true,
+        "priority": 3
+      }
+    },
+    {
+      "id": "migrated-004",
+      "description": "从images.txt第4行迁移",
+      "source": {
+        "repository": "xhofe/alist",
+        "tag": "latest"
+      },
+      "options": {
+        "platform": null,
+        "private_registry": false,
+        "skip_existing": true,
+        "priority": 4
+      }
+    },
+    {
+      "id": "migrated-006",
+      "description": "从images.txt第6行迁移",
+      "source": {
+        "repository": "xiaoyaliu/alist",
+        "tag": "latest"
+      },
+      "options": {
+        "platform": "linux/arm64",
+        "private_registry": false,
+        "skip_existing": true,
+        "priority": 6
+      }
+    },
+    {
+      "id": "migrated-007",
+      "description": "从images.txt第7行迁移",
+      "source": {
+        "repository": "google/deepvariant",
+        "tag": "1.10.0-beta-gpu"
+      },
+      "options": {
+        "platform": null,
+        "private_registry": false,
+        "skip_existing": true,
+        "priority": 7
+      }
+    },
+    {
+      "id": "migrated-008",
+      "description": "从images.txt第8行迁移",
+      "source": {
+        "repository": "google/deepvariant",
+        "tag": "1.9.0-gpu"
+      },
+      "options": {
+        "platform": null,
+        "private_registry": false,
+        "skip_existing": true,
+        "priority": 8
+      }
+    }
+  ]
+}
