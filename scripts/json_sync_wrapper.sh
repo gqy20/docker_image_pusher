@@ -107,14 +107,38 @@ EOF
 
     echo "🚀 发现 $NEEDED_COUNT 个镜像需要同步"
 
-    # 创建临时文本文件供现有脚本使用
-    printf "%s\n" "$NEEDED_IMAGES" > temp_images.txt
+    # 创建结果文件
+    TOTAL_COUNT=$NEEDED_COUNT
+    SUCCESS_COUNT=0
+    FAILED_COUNT=0
 
-    # 使用现有的image-processor.sh进行同步
-    ./scripts/image-processor.sh -f temp_images.txt -o "${OUTPUT_FILE:-sync-result.env}" -s
+    # 逐个同步检测到的镜像
+    echo "$NEEDED_IMAGES" | while IFS= read -r image_line; do
+        if [ -n "$image_line" ]; then
+            echo "📦 同步镜像: $image_line"
+            if ./scripts/sync_single_image.sh "$image_line"; then
+                ((SUCCESS_COUNT++))
+                echo "✅ 同步成功: $image_line"
+            else
+                ((FAILED_COUNT++))
+                echo "❌ 同步失败: $image_line"
+            fi
+        fi
+    done
 
-    # 清理临时文件
-    rm -f temp_images.txt
+    # 创建结果文件
+    cat > "${OUTPUT_FILE:-sync-result.env}" << EOF
+TOTAL_COUNT=$TOTAL_COUNT
+SUCCESS_COUNT=$SUCCESS_COUNT
+FAILED_COUNT=$FAILED_COUNT
+SYNC_COUNT=$TOTAL_COUNT
+SUCCESS_IMAGES<<EOF
+✅ 智能同步完成: 成功 $SUCCESS_COUNT 个镜像
+EOF
+FAILED_IMAGES<<EOF
+❌ 失败镜像: $FAILED_COUNT 个镜像
+EOF
+EOF
 
 else
     # 强制同步所有镜像

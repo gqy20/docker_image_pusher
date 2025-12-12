@@ -52,11 +52,11 @@
       "id": "migrated-006",
       "description": "从images.txt第6行迁移",
       "source": {
-        "repository": "xiaoyaliu/alist",
+        "repository": "",
         "tag": "latest"
       },
       "options": {
-        "platform": "linux/arm64",
+        "platform": "xiaoyaliu/alist:latest",
         "private_registry": false,
         "skip_existing": true,
         "priority": 6
@@ -64,10 +64,10 @@
     },
     {
       "id": "migrated-007",
-      "description": "小型测试镜像 - Redis缓存数据库",
+      "description": "从images.txt第7行迁移",
       "source": {
-        "repository": "redis",
-        "tag": "7-alpine"
+        "repository": "google/deepvariant",
+        "tag": "1.10.0-beta-gpu"
       },
       "options": {
         "platform": null,
@@ -78,30 +78,16 @@
     },
     {
       "id": "migrated-008",
-      "description": "小型测试镜像 - Alpine Linux",
+      "description": "从images.txt第8行迁移",
       "source": {
-        "repository": "alpine",
-        "tag": "3.19"
+        "repository": "google/deepvariant",
+        "tag": "1.9.0-gpu"
       },
       "options": {
         "platform": null,
         "private_registry": false,
         "skip_existing": true,
         "priority": 8
-      }
-    },
-    {
-      "id": "migrated-009",
-      "description": "小型测试镜像 - BusyBox",
-      "source": {
-        "repository": "busybox",
-        "tag": "1.36"
-      },
-      "options": {
-        "platform": null,
-        "private_registry": false,
-        "skip_existing": true,
-        "priority": 9
       }
     }
   ]
