@@ -74,11 +74,6 @@ jobs:
     - name: Docker Setup Buildx
       uses: docker/setup-buildx-action@v3
 
-    - name: Analyze duplicate images
-      run: |
-        # 使用重复镜像分析脚本
-        ./scripts/duplicate-analyzer.sh -f images.txt -o duplicate-report.md -r github
-
     - name: Build and push image Aliyun
       run: |
         set -e  # 启用严格模式
