@@ -300,7 +300,8 @@ smart_sync_images() {
     echo "🚀 开始同步 $needed_images 个缺失的镜像..."
 
     # 调用原来的同步函数处理需要同步的镜像
-    sync_images "$temp_sync_file"
+    # 传递OUTPUT_ENV_FILE环境变量，确保sync_images能写入结果
+    OUTPUT_ENV_FILE="$OUTPUT_ENV_FILE" sync_images "$temp_sync_file"
 
     # 获取同步结果
     local sync_total_count=0

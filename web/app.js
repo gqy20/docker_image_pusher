@@ -116,6 +116,8 @@ class GitHubAPI {
         // 硬编码仓库信息，完全避免API调用
         this.repoOwner = 'gqy20';
         this.repoName = 'docker_image_pusher';
+        this.baseURL = 'https://api.github.com';
+        this.baseURL = 'https://api.github.com';
         this.refreshInterval = Utils.storage.get('refresh_interval', 5) * 1000;
 
         console.log('使用硬编码仓库信息:', `${this.repoOwner}/${this.repoName}`);

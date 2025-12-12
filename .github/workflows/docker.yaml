@@ -273,12 +273,13 @@ jobs:
         fi
 
         # 创建临时文件只包含需要同步的镜像
-        echo "$NEEDED_IMAGES" > temp_images.txt
+        # 确保文件末尾没有多余的空行
+        echo -n "$NEEDED_IMAGES" > temp_images.txt
 
         echo "🚀 开始同步缺失的镜像..."
 
-        # 使用镜像处理脚本进行同步
-        ./scripts/image-processor.sh -f temp_images.txt -o sync-result.env
+        # 使用镜像处理脚本进行同步（启用智能同步模式）
+        ./scripts/image-processor.sh -f temp_images.txt -o sync-result.env -s
 
         # 读取结果
         if [ -f sync-result.env ]; then
