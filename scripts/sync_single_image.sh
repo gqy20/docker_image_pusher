@@ -32,16 +32,24 @@ if echo "$IMAGE_SPEC" | grep -q -- '--platform'; then
     image_name=$(echo "$IMAGE_SPEC" | awk '{print $NF}')
 fi
 
+# 为没有标签的镜像添加默认标签
+if echo "$image_name" | grep -q ':'; then
+    pull_image="$image_name"
+else
+    pull_image="$image_name:latest"
+fi
+
 echo "🐛 调试信息:"
 echo "  原始规格: $IMAGE_SPEC"
 echo "  镜像名称: $image_name"
+echo "  拉取镜像: $pull_image"
 echo "  平台参数: ${platform_param:-无}"
 echo "  目标仓库: $ALIYUN_REGISTRY/$ALIYUN_NAME_SPACE"
 
 # 拉取镜像
-echo "🔄 docker pull $IMAGE_SPEC"
-if ! docker pull $IMAGE_SPEC; then
-    echo "❌ 拉取失败: $IMAGE_SPEC"
+echo "🔄 docker pull $pull_image"
+if ! docker pull $pull_image; then
+    echo "❌ 拉取失败: $pull_image"
     exit 1
 fi
 
@@ -50,16 +58,16 @@ echo "✅ 拉取成功"
 # 生成目标镜像名
 platform_prefix=""
 if [ -n "$platform_param" ]; then
-    platform_prefix="${platform_param//\//_}_"
+    platform_prefix="${platform_prefix//\//_}_"
 fi
 
-# 获取镜像基本信息
-image_name_tag=$(echo "$image_name" | awk -F'/' '{print $NF}')
+# 获取镜像基本信息（使用拉取的镜像名称，确保包含标签）
+image_name_tag=$(echo "$pull_image" | awk -F'/' '{print $NF}')
 new_image="$ALIYUN_REGISTRY/$ALIYUN_NAME_SPACE/${platform_prefix}$image_name_tag"
 
-echo "🏷️  docker tag $image_name $new_image"
-if ! docker tag $image_name $new_image; then
-    echo "❌ 标记失败: $image_name -> $new_image"
+echo "🏷️  docker tag $pull_image $new_image"
+if ! docker tag $pull_image $new_image; then
+    echo "❌ 标记失败: $pull_image -> $new_image"
     exit 1
 fi
 
@@ -73,7 +81,7 @@ echo "✅ 推送成功: $new_image"
 
 # 清理本地镜像以节省空间
 echo "🧹 清理本地镜像..."
-docker rmi $image_name $new_image 2>/dev/null || true
+docker rmi $pull_image $new_image 2>/dev/null || true
 
 echo "🎉 镜像同步完成: $IMAGE_SPEC -> $new_image"
 exit 0

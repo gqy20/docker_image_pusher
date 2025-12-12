@@ -31,79 +31,188 @@ jobs:
     - name: Docker Setup Buildx
       uses: docker/setup-buildx-action@v3
 
-    - name: Extract images from issue
-      id: extract
+    - name: Extract images from structured issue form
       run: |
-        # 使用镜像处理脚本提取镜像
-        # 使用heredoc避免shell语法错误
-        ./scripts/image-processor.sh -i "$(cat << 'EOF'
-        ${{ github.event.issue.body }}
-        EOF
-        )" -o extract-result.env -r extract
+        # 从结构化Issue表单中提取镜像列表
+        echo "🔍 从Issue中提取镜像列表..."
+        echo "Raw issue body:"
+        echo "=========================================="
+        echo "${{ github.event.issue.body }}"
+        echo "=========================================="
 
-    - name: Docker login and sync
+        # 创建Python脚本来解析结构化Issue表单
+        cat > parse_issue.py << 'EOF'
+        import re
+        import sys
+
+        def extract_images_from_issue(issue_body):
+            """从结构化Issue表单中提取镜像列表"""
+            images = []
+
+            # 方法1: 查找代码块中的内容 ```bash 或 ``` ```
+            code_block_pattern = r'```(?:bash)?\s*\n(.*?)\n```'
+            code_blocks = re.findall(code_block_pattern, issue_body, re.DOTALL)
+
+            for block in code_blocks:
+                lines = block.strip().split('\n')
+                for line in lines:
+                    line = line.strip()
+                    if line and not line.startswith('#'):
+                        images.append(line)
+
+            # 方法2: 查找 "### 📦 镜像列表" 标题下的内容
+            if not images:
+                # 匹配以 ### 开头的标题行，后面跟着内容
+                # 处理多种可能的标题格式
+                patterns = [
+                    r'###\s*[📦]?\s*镜像列表\s*\n\n(.*?)(?=\n###|\n--|\Z)',
+                    r'###\s*[📦]?\s*镜像列表\s*\n(.*?)(?=\n###|\n--|\Z)',
+                    r'###\s*images\s*\n\n(.*?)(?=\n###|\n--|\Z)',
+                    r'###\s*images\s*\n(.*?)(?=\n###|\n--|\Z)'
+                ]
+
+                for pattern in patterns:
+                    matches = re.findall(pattern, issue_body, re.DOTALL | re.MULTILINE)
+                    for match in matches:
+                        lines = match.strip().split('\n')
+                        for line in lines:
+                            line = line.strip()
+                            # 过滤有效的镜像格式
+                            if (line and
+                                not line.startswith('#') and
+                                not line.startswith('>') and
+                                not line.startswith('-') and
+                                not line.startswith('*') and
+                                not line.startswith('`') and
+                                not line.startswith('--')):
+                                # 检查是否像镜像名称（包含冒号或斜杠）
+                                if (':' in line or '/' in line or
+                                    line.startswith('--platform=') or
+                                    re.match(r'^[a-zA-Z0-9][a-zA-Z0-9._/-]*$', line)):
+                                    images.append(line)
+
+            # 方法3: 如果还没找到，尝试更宽松的匹配
+            if not images:
+                # 直接查找看起来像镜像的行
+                lines = issue_body.split('\n')
+                for line in lines:
+                    line = line.strip()
+                    if (line and
+                        not line.startswith('#') and
+                        not line.startswith('>') and
+                        not line.startswith('-') and
+                        not line.startswith('*') and
+                        not line.startswith('`') and
+                        not line.startswith('###') and
+                        not line.startswith('##') and
+                        not line.startswith('#') and
+                        not line.startswith('**') and
+                        not line.startswith('*') and
+                        not line.startswith('_') and
+                        not line.startswith('---')):
+
+                        # 检查是否像镜像名称
+                        if (':' in line or '/' in line or
+                            line.startswith('--platform=') or
+                            re.match(r'^[a-zA-Z0-9][a-zA-Z0-9._/-]*$', line)):
+                            images.append(line)
+
+            return images
+
+        # 读取Issue内容
+        issue_body = """${{ github.event.issue.body }}"""
+
+        # 提取镜像列表
+        images = extract_images_from_issue(issue_body)
+
+        # 输出结果
+        if images:
+            print("✅ 成功提取镜像列表:")
+            for img in images:
+                print(f"  {img}")
+
+            # 保存到文件
+            with open('issue_images.txt', 'w') as f:
+                for img in images:
+                    f.write(f"{img}\n")
+
+            print(f"\n📊 共提取到 {len(images)} 个镜像")
+        else:
+            print("❌ 未找到有效的镜像列表")
+            print("请检查Issue格式，确保镜像列表填写正确")
+            sys.exit(1)
+        EOF
+
+        # 运行Python脚本
+        python3 parse_issue.py
+
+        # 显示提取的镜像
+        echo "📋 最终提取到的镜像:"
+        cat issue_images.txt | sed 's/^/  > /'
+
+        # 更安全的计数方法
+        if [ -s issue_images.txt ]; then
+          IMAGE_COUNT=$(wc -l < issue_images.txt | tr -d ' ')
+        else
+          IMAGE_COUNT=0
+        fi
+
+        echo "📊 找到 $IMAGE_COUNT 个镜像"
+
+        # 如果没有找到有效镜像，退出
+        if [ "$IMAGE_COUNT" -eq 0 ]; then
+          echo "❌ 未在Issue中找到有效的镜像列表"
+          echo "请检查Issue格式，每行一个镜像名称"
+          exit 1
+        fi
+
+        # 设置环境变量供后续步骤使用
+        echo "IMAGE_COUNT=$IMAGE_COUNT" >> $GITHUB_ENV
+
+        # 清理临时脚本
+        rm -f parse_issue.py
+
+    - name: Docker login and sync using unified processor
       run: |
-        set +e
+        set -e
 
         # 登录阿里云仓库
         docker login -u $ALIYUN_REGISTRY_USER -p $ALIYUN_REGISTRY_PASSWORD $ALIYUN_REGISTRY
 
-        echo "🔍 开始镜像同步..."
+        echo "🚀 开始Issue触发的镜像同步..."
         echo "=============================================================================="
 
-        # 从提取结果中读取镜像数量
-        if [ -f extract-result.env ]; then
-            source extract-result.env
-        fi
+        # 将Issue内容转换为JSON配置
+        python3 ./scripts/issue_to_json.py issue_images.txt issue_images.json
 
-        # 如果没有有效镜像，退出
-        if [ "${image_count:-0}" -eq 0 ]; then
-            echo "No valid images found in issue"
-            echo "Full issue body:"
-            echo "${{ github.event.issue.body }}"
-            exit 1
-        fi
-
-        echo "Found ${image_count:-0} valid images to sync"
-
-        # 调试：打印提取的镜像内容
-        echo "🔍 调试信息：extracted_images.txt 内容"
-        echo "=============================================="
-        if [ -f extracted_images.txt ]; then
-            echo "📁 extracted_images.txt 存在，内容如下："
-            cat extracted_images.txt
-            echo ""
-            echo "📊 文件行数: $(cat extracted_images.txt | wc -l)"
-            echo "📊 文件大小: $(wc -c < extracted_images.txt) 字节"
-        else
-            echo "❌ extracted_images.txt 文件不存在！"
-        fi
-        echo "=============================================="
-
-        # 使用镜像处理脚本进行智能同步（跳过已存在的镜像）
-        ./scripts/image-processor.sh -f extracted_images.txt -o sync-result.env -s
+        # 使用统一处理器进行同步
+        ./scripts/unified_sync.py -f -c issue_images.json -o issue-sync-result.env
 
         # 读取结果并设置环境变量
-        if [ -f sync-result.env ]; then
-            source sync-result.env
+        if [ -f issue-sync-result.env ]; then
+            source issue-sync-result.env
         fi
 
-        # 保存结果用于评论 - 确保计数一致
+        # 保存结果用于评论
         echo "TOTAL_COUNT=$TOTAL_COUNT" >> $GITHUB_ENV
         echo "SUCCESS_COUNT=$SUCCESS_COUNT" >> $GITHUB_ENV
-        echo "SKIPPED_COUNT=$SKIPPED_COUNT" >> $GITHUB_ENV
+        echo "FAILED_COUNT=$FAILED_COUNT" >> $GITHUB_ENV
 
         # 保存成功和失败的镜像列表
-        echo "SUCCESS_IMAGES<<EOF" >> $GITHUB_ENV
-        echo "$SUCCESS_IMAGES" >> $GITHUB_ENV
-        echo "EOF" >> $GITHUB_ENV
+        if [ "$SUCCESS_COUNT" -gt 0 ]; then
+            echo "SUCCESS_IMAGES=\"$SUCCESS_IMAGES\"" >> $GITHUB_ENV
+        else
+            echo 'SUCCESS_IMAGES=""' >> $GITHUB_ENV
+        fi
 
-        echo "FAILED_IMAGES<<EOF" >> $GITHUB_ENV
-        echo "$FAILED_IMAGES" >> $GITHUB_ENV
-        echo "EOF" >> $GITHUB_ENV
+        if [ "$FAILED_COUNT" -gt 0 ]; then
+            echo "FAILED_IMAGES=\"$FAILED_IMAGES\"" >> $GITHUB_ENV
+        else
+            echo 'FAILED_IMAGES=""' >> $GITHUB_ENV
+        fi
 
         # 清理临时文件
-        rm -f extract-result.env sync-result.env extracted_images.txt
+        rm -f issue_images.txt issue_images.json issue-sync-result.env
 
     - name: Add final comment
       if: always()
