@@ -1,0 +1,56 @@
+# 基于Ubuntu的Rust开发环境
+FROM ubuntu:22.04
+
+LABEL maintainer="your-email@example.com"
+LABEL description="Ubuntu-based Rust Development Environment"
+
+# 设置非交互式安装
+ENV DEBIAN_FRONTEND=noninteractive
+
+# 设置时区
+ENV TZ=Asia/Shanghai
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+# 更新包管理器并安装基础依赖
+RUN apt-get update && apt-get install -y \
+    # 基础工具
+    curl \
+    wget \
+    git \
+    vim \
+    nano \
+    build-essential \
+    pkg-config \
+    libssl-dev \
+    # Rust编译依赖
+    gcc \
+    g++ \
+    make \
+    cmake \
+    # 网络工具
+    net-tools \
+    iputils-ping \
+    # 进程管理
+    htop \
+    # 清理缓存
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# 安装Rust
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+
+# 配置环境变量
+ENV PATH="/root/.cargo/bin:$PATH"
+ENV RUST_LOG=info
+
+# 安装常用Rust工具
+RUN cargo install cargo-watch \
+    && cargo install cargo-edit \
+    && cargo install cargo-audit \
+    && cargo install cargo-expand
+
+# 创建开发工作目录
+WORKDIR /workspace
+
+# 设置默认命令
+CMD ["bash"]

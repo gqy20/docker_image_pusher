@@ -1,0 +1,169 @@
+name: Dockerfile Auto Build
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'dockerfiles/**'  # 只有dockerfiles文件夹变化时才触发
+  workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: '强制重新构建所有Dockerfile'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+
+env:
+  ALIYUN_REGISTRY: "${{ secrets.ALIYUN_REGISTRY }}"
+  ALIYUN_NAME_SPACE: "${{ secrets.ALIYUN_NAME_SPACE }}"
+  ALIYUN_REGISTRY_USER: "${{ secrets.ALIYUN_REGISTRY_USER }}"
+  ALIYUN_REGISTRY_PASSWORD: "${{ secrets.ALIYUN_REGISTRY_PASSWORD }}"
+
+jobs:
+  build:
+    name: Build Dockerfiles
+    runs-on: ubuntu-latest
+    env:
+      ALIYUN_REGISTRY: ${{ secrets.ALIYUN_REGISTRY }}
+      ALIYUN_NAME_SPACE: ${{ secrets.ALIYUN_NAME_SPACE }}
+      ALIYUN_REGISTRY_USER: ${{ secrets.ALIYUN_REGISTRY_USER }}
+      ALIYUN_REGISTRY_PASSWORD: ${{ secrets.ALIYUN_REGISTRY_PASSWORD }}
+    steps:
+    - name: Before freeing up disk space
+      run: |
+        echo "Before freeing up disk space"
+        echo "=============================================================================="
+        df -hT
+        echo "=============================================================================="
+
+    # 增加可用磁盘空间
+    - name: Maximize build space
+      uses: easimon/maximize-build-space@master
+      with:
+        root-reserve-mb: 2048
+        swap-size-mb: 128
+        remove-dotnet: 'true'
+        remove-haskell: 'true'
+        build-mount-path: '/var/lib/docker/'
+
+    - name: Checkout Code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 2  # 获取最近两次提交，用于比较文件变化
+
+    - name: Docker Environment Setup
+      run: |
+        ./scripts/docker-setup.sh
+
+    - name: Free up disk space complete
+      run: |
+        echo "Free up disk space complete"
+        echo "=============================================================================="
+        df -hT
+        echo "=============================================================================="
+
+    - name: Docker Setup Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Login to Aliyun Registry
+      run: |
+        echo "🔐 登录阿里云镜像仓库..."
+        docker login -u $ALIYUN_REGISTRY_USER -p $ALIYUN_REGISTRY_PASSWORD $ALIYUN_REGISTRY
+
+    - name: Check for Dockerfile changes
+      id: check_changes
+      run: |
+        echo "🔍 检查dockerfiles文件夹变化..."
+
+        if [ "${{ github.event.inputs.force_rebuild }}" == "true" ]; then
+          echo "⚡ 强制重建模式：将构建所有Dockerfile"
+          echo "rebuild_all=true" >> $GITHUB_OUTPUT
+
+          # 列出所有Dockerfile
+          if [ -d "dockerfiles" ]; then
+            find dockerfiles -type f -not -name ".*" | sort > changed_files.txt
+            echo "📋 发现的Dockerfile:"
+            cat changed_files.txt | sed 's/^/  - /'
+          else
+            echo "❌ dockerfiles文件夹不存在"
+            exit 1
+          fi
+        else
+          echo "🔍 增量构建模式：仅构建变化的Dockerfile"
+          echo "rebuild_all=false" >> $GITHUB_OUTPUT
+
+          # 检查dockerfiles文件夹是否存在
+          if [ ! -d "dockerfiles" ]; then
+            echo "ℹ️ dockerfiles文件夹不存在，跳过构建"
+            echo "changed_files_count=0" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # 获取变化的文件列表
+          if [ "${{ github.event_name }}" == "push" ]; then
+            # Push事件，比较当前和上次提交
+            CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD | grep "^dockerfiles/" || true)
+          else
+            # 手动触发，构建所有文件
+            CHANGED_FILES=$(find dockerfiles -type f -not -name ".*" | sort)
+          fi
+
+          if [ -n "$CHANGED_FILES" ]; then
+            echo "$CHANGED_FILES" > changed_files.txt
+            echo "📋 发现变化的Dockerfile:"
+            cat changed_files.txt | sed 's/^/  - /'
+          else
+            echo "ℹ️ 没有发现变化的Dockerfile"
+            echo "changed_files_count=0" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+        fi
+
+        # 统计变化文件数量
+        if [ -f "changed_files.txt" ]; then
+          COUNT=$(wc -l < changed_files.txt)
+          echo "changed_files_count=$COUNT" >> $GITHUB_OUTPUT
+        else
+          echo "changed_files_count=0" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Build and push Docker images
+      if: steps.check_changes.outputs.changed_files_count > 0
+      run: |
+        echo "🚀 开始构建Docker镜像..."
+        echo "=============================================================================="
+        echo "📂 命名空间: $ALIYUN_NAME_SPACE"
+        echo "📋 构建数量: ${{ steps.check_changes.outputs.changed_files_count }} 个文件"
+        echo "🔄 重建模式: ${{ steps.check_changes.outputs.rebuild_all == 'true' && '强制重建' || '增量构建' }}"
+        echo "=============================================================================="
+
+        # 使用构建脚本
+        ./scripts/build_dockerfiles.py --files changed_files.txt --namespace "$ALIYUN_NAME_SPACE" --output build-result.env
+
+    - name: Display build results
+      if: steps.check_changes.outputs.changed_files_count > 0
+      run: |
+        if [ -f build-result.env ]; then
+          source build-result.env
+          echo "📊 构建结果:"
+          echo "  📋 构建总数: $TOTAL_COUNT 个镜像"
+          echo "  ✅ 构建成功: $SUCCESS_COUNT 个镜像"
+          echo "  ❌ 构建失败: $FAILED_COUNT 个镜像"
+
+          # 显示成功和失败的镜像详情
+          if [ "$SUCCESS_COUNT" -gt 0 ]; then
+            echo "🎉 成功构建的镜像:"
+            echo "$SUCCESS_IMAGES" | grep "^✅" || echo "  详情请查看日志"
+          fi
+
+          if [ "$FAILED_COUNT" -gt 0 ]; then
+            echo "⚠️ 构建失败的镜像:"
+            echo "$FAILED_IMAGES" | grep "^❌" || echo "  详情请查看日志"
+          fi
+        else
+          echo "❌ 未找到构建结果文件"
+          exit 1
+        fi
