@@ -45,13 +45,11 @@ jobs:
         echo "✅ 已创建备份文件: $BACKUP_FILE"
 
         # 使用jq批量更新所有非latest的tag为latest
-        # 保持原有JSON结构，只修改source.tag字段
+        # 保持原有JSON结构，使用walk遍历修改
         jq '
-          (.images // []) as $imgs |
-          reduce ($imgs | to_entries | .[]) as $entry (
-            .;
-            if $entry.value.type == "object" and ($entry.value.source // {}) | (.tag // "") != "" and .tag != "latest" then
-              .images[$entry.key].source.tag = "latest"
+          walk(
+            if type == "object" and has("source") and (.source | type == "object") and (.source.tag | type == "string") and .source.tag != "latest" then
+              .source.tag = "latest"
             else
               .
             end
