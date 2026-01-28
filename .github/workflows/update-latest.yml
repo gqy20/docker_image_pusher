@@ -42,22 +42,20 @@ jobs:
         # 使用jq处理JSON，标记需要更新的镜像
         # jq 脚本逻辑：检查每个镜像，如果没有tag或tag不是latest，则更新为latest
         UPDATED_IMAGES=$(jq '
-          [.images |
-          to_entries |
-          map(
-            .value.source.tag as $tag |
-            if $tag == null or $tag == "" or $tag == "latest" then
-              empty
-            else
-              {
-                index: .key,
-                id: .value.id,
-                repository: .value.source.repository,
-                old_tag: $tag,
-                new_tag: "latest"
-              }
-            end
-          )]
+          .images |
+          [to_entries[] |
+          .value.source.tag as $tag |
+          if $tag == null or $tag == "" or $tag == "latest" then
+            empty
+          else
+            {
+              index: .key,
+              id: .value.id,
+              repository: .value.source.repository,
+              old_tag: $tag,
+              new_tag: "latest"
+            }
+          end]
         ' $IMAGES_FILE)
 
         echo "🎯 镜像更新检查结果:"
