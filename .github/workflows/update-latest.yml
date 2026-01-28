@@ -34,22 +34,32 @@ jobs:
         echo "🔍 开始检查并更新最新版本的镜像..."
         echo "=============================================================================="
 
+        # 验证JSON格式
+        if ! jq empty "$IMAGES_FILE" 2>/dev/null; then
+          echo "❌ JSON格式错误"
+          exit 1
+        fi
+
         # 创建备份
         cp "$IMAGES_FILE" "$BACKUP_FILE"
         echo "✅ 已创建备份文件: $BACKUP_FILE"
 
         # 使用jq批量更新所有非latest的tag为latest
-        # 只更新 source.tag 存在且不是 "latest" 的镜像
+        # 只更新 type 为 "object" 且 source.tag 存在且不是 "latest" 的镜像
         jq '
           .images = (.images // []) |
           map(
-            if .source and (.source.tag // "") != "" and .source.tag != "latest" then
+            if type == "object" and .source and (.source.tag // "") != "" and .source.tag != "latest" then
               .source.tag = "latest"
             else
               .
             end
           )
-        ' "$BACKUP_FILE" > "$IMAGES_FILE"
+        ' "$BACKUP_FILE" > "$IMAGES_FILE" || {
+          echo "❌ jq处理失败，恢复备份"
+          cp "$BACKUP_FILE" "$IMAGES_FILE"
+          exit 1
+        }
 
         # 检查是否有变更
         if diff -q "$BACKUP_FILE" "$IMAGES_FILE" > /dev/null 2>&1; then
@@ -59,19 +69,19 @@ jobs:
 
           # 统计更新的镜像数量
           UPDATED_COUNT=$(jq '
-            [(.images // [])[] |
-            if (.source.tag // "") != "latest" then
-              .id + ": " + (.source.repository // "") + ":" + (.source.tag // "")
+            [.images[] |
+            if type == "object" and (.source.tag // "") != "latest" then
+              .
             else empty end] | length
           ' "$BACKUP_FILE")
 
           echo "📦 发现 $UPDATED_COUNT 个镜像需要更新:"
           jq -r '
-            [(.images // [])[] |
-            if (.source.tag // "") != "latest" then
-              "  🔄 镜像[\(.id)]: \(.source.repository // ""):\(.source.tag // "") → \(.source.repository // ""):latest"
-            else empty end] | .[]
-          ' "$BACKUP_FILE"
+            [.images[] |
+            if type == "object" and (.source.tag // "") != "latest" then
+              "  🔄 镜像[\(.id)]: \(.source.repository):\(.source.tag) → \(.source.repository):latest"
+            else empty end] | .[] | select(length > 0)
+          ' "$BACKUP_FILE" 2>/dev/null || echo "  (无法显示详细信息)"
           echo ""
 
           # 配置git用户信息
