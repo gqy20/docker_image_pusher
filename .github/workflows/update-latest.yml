@@ -30,119 +30,79 @@ jobs:
       run: |
         IMAGES_FILE="images.json"
         BACKUP_FILE="images.json.backup"
-        UPDATED=false
 
         echo "🔍 开始检查并更新最新版本的镜像..."
         echo "=============================================================================="
 
         # 创建备份
-        cp $IMAGES_FILE $BACKUP_FILE
+        cp "$IMAGES_FILE" "$BACKUP_FILE"
         echo "✅ 已创建备份文件: $BACKUP_FILE"
 
-        # 使用jq处理JSON，标记需要更新的镜像
-        # jq 脚本逻辑：检查每个镜像，如果没有tag或tag不是latest，则更新为latest
-        UPDATED_IMAGES=$(jq '
-          .images |
-          [to_entries[] |
-          .value.source.tag as $tag |
-          if $tag == null or $tag == "" or $tag == "latest" then
-            empty
-          else
-            {
-              index: .key,
-              id: .value.id,
-              repository: .value.source.repository,
-              old_tag: $tag,
-              new_tag: "latest"
-            }
-          end]
-        ' $IMAGES_FILE)
+        # 使用jq批量更新所有非latest的tag为latest
+        # 只更新 source.tag 存在且不是 "latest" 的镜像
+        jq '
+          .images = (.images // []) |
+          map(
+            if .source and (.source.tag // "") != "" and .source.tag != "latest" then
+              .source.tag = "latest"
+            else
+              .
+            end
+          )
+        ' "$BACKUP_FILE" > "$IMAGES_FILE"
 
-        echo "🎯 镜像更新检查结果:"
-        echo "$UPDATED_IMAGES"
-        echo ""
+        # 检查是否有变更
+        if diff -q "$BACKUP_FILE" "$IMAGES_FILE" > /dev/null 2>&1; then
+          echo "👍 所有镜像版本已是最新，无需更新"
+        else
+          echo "🎉 发现镜像更新，开始提交更改..."
 
-        # 检查是否有需要更新的镜像
-        UPDATE_COUNT=$(echo "$UPDATED_IMAGES" | jq 'length')
-        if [ "$UPDATE_COUNT" -gt 0 ] 2>/dev/null; then
-          UPDATED=true
-          echo "📦 发现 $(echo "$UPDATED_IMAGES" | jq 'length') 个镜像需要更新:"
+          # 统计更新的镜像数量
+          UPDATED_COUNT=$(jq '
+            [(.images // [])[] |
+            if (.source.tag // "") != "latest" then
+              .id + ": " + (.source.repository // "") + ":" + (.source.tag // "")
+            else empty end] | length
+          ' "$BACKUP_FILE")
 
-          # 逐个处理并更新
-          echo "$UPDATED_IMAGES" | jq -c '.[]' | while read -r item; do
-            index=$(echo "$item" | jq -r '.index')
-            id=$(echo "$item" | jq -r '.id')
-            repo=$(echo "$item" | jq -r '.repository')
-            old_tag=$(echo "$item" | jq -r '.old_tag')
-
-            echo "  🔄 镜像[$id]: $repo:$old_tag → $repo:latest"
-          done
+          echo "📦 发现 $UPDATED_COUNT 个镜像需要更新:"
+          jq -r '
+            [(.images // [])[] |
+            if (.source.tag // "") != "latest" then
+              "  🔄 镜像[\(.id)]: \(.source.repository // ""):\(.source.tag // "") → \(.source.repository // ""):latest"
+            else empty end] | .[]
+          ' "$BACKUP_FILE"
           echo ""
 
-          # 更新JSON中的tag为latest
-          jq '
-            .images = .images |
-            map(
-              if .source.tag == null or .source.tag == "" or .source.tag == "latest" then
-                .
-              else
-                .source.tag = "latest"
-              end
-            )
-          ' $BACKUP_FILE > $IMAGES_FILE
+          # 配置git用户信息
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
 
-          echo "✅ 已更新 images.json 中的镜像标签为 latest"
-        else
-          echo "👍 所有镜像版本已是最新，无需更新"
-        fi
+          # 添加并提交更改
+          git add "$IMAGES_FILE"
+          git commit -m "chore: 自动更新latest版本镜像
 
-        echo "=============================================================================="
+          - 为已配置镜像统一添加 :latest 标签
+          - 保持指定版本的镜像不变
+          - 同步更新镜像配置
 
-        # 检查是否有更新并提交
-        if [[ "$UPDATED" == true ]]; then
-          echo "🎉 开始提交更改..."
+          🤖 Generated with [Claude Code](https://claude.com/claude-code)
 
-          # 检查git状态
-          if [[ -n $(git status --porcelain $IMAGES_FILE) ]]; then
-            echo "📝 正在提交更改..."
+          Co-Authored-By: GitHub Action <action@github.com>"
 
-            # 配置git用户信息
-            git config --local user.email "action@github.com"
-            git config --local user.name "GitHub Action"
+          # 推送更改
+          git push
 
-            # 添加并提交更改
-            git add $IMAGES_FILE
-            git commit -m "chore: 自动更新latest版本镜像
-
-            - 为已配置镜像统一添加 :latest 标签
-            - 保持指定版本的镜像不变
-            - 同步更新镜像配置
-
-            🤖 Generated with [Claude Code](https://claude.com/claude-code)
-
-            Co-Authored-By: GitHub Action <action@github.com>"
-
-            # 推送更改
-            git push
-
-            echo "✅ 更新已成功推送到仓库！"
-
-            # 显示更新对比
-            echo ""
-            echo "📊 变更统计:"
-            echo "=============================================================================="
-            echo "更新的镜像数量: $(echo "$UPDATED_IMAGES" | jq 'length')"
-            echo "=============================================================================="
-
-          else
-            echo "❌ 没有检测到文件变更"
-          fi
-        else
-          echo "👍 所有镜像版本已是最新，无需更新"
+          echo "✅ 更新已成功推送到仓库！"
+          echo ""
+          echo "📊 变更统计:"
+          echo "=============================================================================="
+          echo "更新的镜像数量: $UPDATED_COUNT"
+          echo "=============================================================================="
         fi
 
         # 清理备份文件
-        rm -f $BACKUP_FILE
+        rm -f "$BACKUP_FILE"
         echo "🧹 清理完成"
 
     - name: Trigger Docker Sync
