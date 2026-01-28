@@ -1,11 +1,11 @@
-[
-  "1.0",
-  {
+{
+  "version": "1.0",
+  "metadata": {
     "description": "从images.txt迁移的JSON配置",
     "created": "2025-12-12T18:06:59.448356",
     "migrated_from": "images.txt"
   },
-  [
+  "images": [
     {
       "id": "migrated-001",
       "description": "从images.txt第1行迁移",
@@ -105,4 +105,4 @@
       }
     }
   ]
-]
+}
