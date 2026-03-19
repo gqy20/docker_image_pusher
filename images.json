@@ -21,20 +21,6 @@
       }
     },
     {
-      "id": "migrated-003",
-      "description": "从images.txt第3行迁移",
-      "source": {
-        "repository": "k8s.gcr.io/kube-state-metrics/kube-state-metrics",
-        "tag": "latest"
-      },
-      "options": {
-        "platform": null,
-        "private_registry": true,
-        "skip_existing": true,
-        "priority": 3
-      }
-    },
-    {
       "id": "migrated-004",
       "description": "从images.txt第4行迁移",
       "source": {

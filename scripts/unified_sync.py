@@ -191,6 +191,13 @@ class UnifiedImageSync:
                 capture_output=True, text=True, timeout=600,  # 10分钟超时
                 check=False
             )
+            if result.stdout:
+                print(result.stdout.rstrip())
+            if result.stderr:
+                print("⚠️ 同步脚本错误输出:")
+                print(result.stderr.rstrip())
+            if result.returncode != 0:
+                print(f"❌ 同步脚本退出码: {result.returncode}")
             return result.returncode == 0
         except subprocess.TimeoutExpired:
             print(f"❌ 同步超时: {image_spec}")
