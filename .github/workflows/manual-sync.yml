@@ -65,10 +65,10 @@ jobs:
       run: sudo service docker restart
 
     - name: 检出代码
-      uses: actions/checkout@v6
+      uses: actions/checkout@v6.0.2
 
     - name: Docker Setup Buildx
-      uses: docker/setup-buildx-action@v4
+      uses: docker/setup-buildx-action@v4.0.0
 
     - name: 解析和同步镜像
       run: |
