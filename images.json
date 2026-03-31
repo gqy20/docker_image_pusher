@@ -89,6 +89,20 @@
         "skip_existing": true,
         "priority": 9
       }
+    },
+    {
+      "id": "migrated-010",
+      "description": "PostgreSQL 17.3 数据库镜像",
+      "source": {
+        "repository": "postgres",
+        "tag": "17.3"
+      },
+      "options": {
+        "platform": null,
+        "private_registry": false,
+        "skip_existing": true,
+        "priority": 10
+      }
     }
   ]
 }
